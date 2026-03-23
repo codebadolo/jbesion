@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { selectUser } from '../../store/authSlice.js'
 import {
@@ -14,10 +15,10 @@ import LoadingSpinner from '../../components/Common/LoadingSpinner.jsx'
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const ROLES = [
-  { value: 'EMPLOYEE', label: 'Employé' },
-  { value: 'MANAGER', label: 'Manager' },
+  { value: 'EMPLOYEE', label: 'Collaborateur' },
+  { value: 'MANAGER', label: 'Supérieur Hiérarchique' },
   { value: 'DAF', label: 'DAF' },
-  { value: 'DIRECTOR', label: 'Directeur' },
+  { value: 'DIRECTOR', label: 'DG' },
   { value: 'ADMIN', label: 'Admin' },
 ]
 
@@ -30,10 +31,10 @@ const ROLE_BADGE = {
 }
 
 const ROLE_LABELS = {
-  EMPLOYEE: 'Employé',
-  MANAGER: 'Manager',
+  EMPLOYEE: 'Collaborateur',
+  MANAGER: 'Supérieur Hiérarchique',
   DAF: 'DAF',
-  DIRECTOR: 'Directeur',
+  DIRECTOR: 'DG',
   ADMIN: 'Admin',
 }
 
@@ -411,7 +412,8 @@ export default function UsersList() {
                   <th className="table-header">Email</th>
                   <th className="table-header">Rôle</th>
                   <th className="table-header">Département</th>
-                  <th className="table-header">Manager</th>
+                  <th className="table-header">Supérieur Hiérarchique</th>
+                  <th className="table-header">Détails</th>
                   {isAdmin && <th className="table-header">Actions</th>}
                 </tr>
               </thead>
@@ -421,9 +423,9 @@ export default function UsersList() {
                   const initials = (
                     (user.first_name?.[0] || '') + (user.last_name?.[0] || '')
                   ).toUpperCase() || user.username?.[0]?.toUpperCase() || '?'
-                  const deptName = user.department?.name || user.department_name || '—'
-                  const managerName = user.manager
-                    ? [user.manager.first_name, user.manager.last_name].filter(Boolean).join(' ') || user.manager.username
+                  const deptName = user.department_detail?.name || '—'
+                  const managerName = user.manager_detail
+                    ? [user.manager_detail.first_name, user.manager_detail.last_name].filter(Boolean).join(' ') || user.manager_detail.username
                     : '—'
 
                   return (
@@ -446,6 +448,17 @@ export default function UsersList() {
                       </td>
                       <td className="table-cell text-gray-500">{deptName}</td>
                       <td className="table-cell text-gray-500">{managerName}</td>
+                      <td className="table-cell">
+                        <Link
+                          to={`/admin/utilisateurs/${user.id}`}
+                          className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                        >
+                          Voir
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                          </svg>
+                        </Link>
+                      </td>
                       {isAdmin && (
                         <td className="table-cell">
                           <div className="flex items-center gap-1.5">
@@ -595,19 +608,33 @@ export default function UsersList() {
                 </select>
               </FormField>
 
-              <FormField label="Manager" error={formErrors.manager}>
+              <FormField label="Supérieur Hiérarchique" error={formErrors.manager}>
                 <select
                   name="manager"
                   value={form.manager}
                   onChange={handleChange}
                   className="form-input appearance-none"
                 >
-                  <option value="">— Aucun manager —</option>
-                  {managers.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {[m.first_name, m.last_name].filter(Boolean).join(' ') || m.username}
-                    </option>
-                  ))}
+                  <option value="">— Aucun supérieur —</option>
+                  {/* Managers du même département en premier */}
+                  {form.department && managers.some(m => (m.department?.id?.toString() || m.department?.toString()) === form.department) && (
+                    <optgroup label="— Même département —">
+                      {managers
+                        .filter(m => (m.department?.id?.toString() || m.department?.toString()) === form.department)
+                        .map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {[m.first_name, m.last_name].filter(Boolean).join(' ') || m.username}
+                          </option>
+                        ))}
+                    </optgroup>
+                  )}
+                  <optgroup label="— Tous les supérieurs —">
+                    {managers.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {[m.first_name, m.last_name].filter(Boolean).join(' ') || m.username}
+                      </option>
+                    ))}
+                  </optgroup>
                 </select>
               </FormField>
 

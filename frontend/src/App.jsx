@@ -8,12 +8,16 @@ import Layout from './components/Layout/Layout.jsx'
 
 import Login from './pages/Login/Login.jsx'
 import Dashboard from './pages/Dashboard/Dashboard.jsx'
-import FichesList from './pages/Fiches/FichesList.jsx'
-import FicheCreate from './pages/Fiches/FicheCreate.jsx'
+import FichesInternesList from './pages/Fiches/FichesInternesList.jsx'
+import FichesExternesList from './pages/Fiches/FichesExternesList.jsx'
+import FicheInterneCreate from './pages/Fiches/FicheInterneCreate.jsx'
+import FicheExterneCreate from './pages/Fiches/FicheExterneCreate.jsx'
 import FicheDetail from './pages/Fiches/FicheDetail.jsx'
 import UsersList from './pages/Admin/UsersList.jsx'
+import UserDetail from './pages/Admin/UserDetail.jsx'
 import DepartmentsList from './pages/Admin/DepartmentsList.jsx'
 import NotFound from './pages/NotFound/NotFound.jsx'
+import Profile from './pages/Profile/Profile.jsx'
 
 export default function App() {
   const dispatch = useDispatch()
@@ -42,12 +46,16 @@ export default function App() {
         >
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
-          <Route path="fiches" element={<FichesList />} />
-          <Route path="fiches/create" element={<FicheCreate />} />
+          <Route path="fiches-internes" element={<FichesInternesList />} />
+          <Route path="fiches-internes/create" element={<FicheInterneCreate />} />
           <Route path="fiches-internes/:id" element={<FicheDetail type="interne" />} />
+          <Route path="fiches-externes" element={<FichesExternesList />} />
+          <Route path="fiches-externes/create" element={<FicheExterneCreate />} />
           <Route path="fiches-externes/:id" element={<FicheDetail type="externe" />} />
           <Route path="admin/utilisateurs" element={<UsersList />} />
+          <Route path="admin/utilisateurs/:id" element={<UserDetail />} />
           <Route path="admin/departements" element={<DepartmentsList />} />
+          <Route path="profil" element={<Profile />} />
         </Route>
 
         {/* 404 */}

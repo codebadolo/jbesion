@@ -20,6 +20,7 @@ from .models import (
     FicheExterne,
     FicheExterneItem,
     Validation,
+    Notification,
     FicheType,
     ValidationStatus,
 )
@@ -65,6 +66,15 @@ class FicheInterneSerializer(serializers.ModelSerializer):
     created_by_detail = UserSerializer(source="created_by", read_only=True)
     department_detail = DepartmentShortSerializer(source="department", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
+    executed_by_detail = UserSerializer(source="executed_by", read_only=True)
+    validation_history = serializers.SerializerMethodField()
+
+    def get_validation_history(self, obj):
+        ct = ContentType.objects.get_for_model(FicheInterne)
+        qs = Validation.objects.filter(
+            content_type=ct, object_id=obj.pk
+        ).select_related("validator").order_by("date_validation")
+        return ValidationSerializer(qs, many=True).data
 
     class Meta:
         model = FicheInterne
@@ -79,17 +89,34 @@ class FicheInterneSerializer(serializers.ModelSerializer):
             "status_display",
             "notes",
             "items",
+            "executed_by",
+            "executed_by_detail",
+            "executed_at",
+            "execution_fournisseur",
+            "execution_reference",
+            "execution_montant",
+            "execution_mode_paiement",
+            "execution_numero_facture",
+            "execution_note",
+            "received_at",
             "created_at",
             "updated_at",
+            "validation_history",
         ]
         read_only_fields = [
             "id",
             "created_by",
             "date_creation",
             "status",
+            "executed_by",
+            "executed_at",
+            "received_at",
             "created_at",
             "updated_at",
         ]
+        extra_kwargs = {
+            "department": {"required": False, "allow_null": True},
+        }
 
     def _save_items(self, fiche: FicheInterne, items_data: list) -> None:
         """Delete old items and recreate from provided data."""
@@ -156,6 +183,15 @@ class FicheExterneSerializer(serializers.ModelSerializer):
     created_by_detail = UserSerializer(source="created_by", read_only=True)
     department_detail = DepartmentShortSerializer(source="department", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
+    executed_by_detail = UserSerializer(source="executed_by", read_only=True)
+    validation_history = serializers.SerializerMethodField()
+
+    def get_validation_history(self, obj):
+        ct = ContentType.objects.get_for_model(FicheExterne)
+        qs = Validation.objects.filter(
+            content_type=ct, object_id=obj.pk
+        ).select_related("validator").order_by("date_validation")
+        return ValidationSerializer(qs, many=True).data
 
     class Meta:
         model = FicheExterne
@@ -170,17 +206,34 @@ class FicheExterneSerializer(serializers.ModelSerializer):
             "status_display",
             "notes",
             "items",
+            "executed_by",
+            "executed_by_detail",
+            "executed_at",
+            "execution_fournisseur",
+            "execution_reference",
+            "execution_montant",
+            "execution_mode_paiement",
+            "execution_numero_facture",
+            "execution_note",
+            "received_at",
             "created_at",
             "updated_at",
+            "validation_history",
         ]
         read_only_fields = [
             "id",
             "created_by",
             "date_creation",
             "status",
+            "executed_by",
+            "executed_at",
+            "received_at",
             "created_at",
             "updated_at",
         ]
+        extra_kwargs = {
+            "department": {"required": False, "allow_null": True},
+        }
 
     def _save_items(self, fiche: FicheExterne, items_data: list) -> None:
         fiche.items.all().delete()
@@ -273,12 +326,44 @@ class ValidateActionSerializer(serializers.Serializer):
 
     Expected payload:
       {
-        "action": "approve" | "reject",
-        "commentaire": "optional comment"
+        "action": "approve" | "reject" | "request_clarification",
+        "commentaire": "optional comment (required for reject / request_clarification)"
       }
     """
 
-    ACTION_CHOICES = [("approve", "Approuver"), ("reject", "Rejeter")]
+    ACTION_CHOICES = [
+        ("approve", "Approuver"),
+        ("reject", "Rejeter"),
+        ("request_clarification", "Demander clarification"),
+    ]
 
     action = serializers.ChoiceField(choices=ACTION_CHOICES)
     commentaire = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class RespondClarificationSerializer(serializers.Serializer):
+    """
+    Validates the request body for the /respond_clarification/ action.
+
+    Expected payload:
+      { "commentaire": "the manager's response" }
+    """
+    commentaire = serializers.CharField(required=True, allow_blank=False)
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    sender_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Notification
+        fields = [
+            "id", "message", "is_read", "notification_type",
+            "fiche_type", "fiche_id", "created_at", "sender_name",
+        ]
+        read_only_fields = fields
+
+    def get_sender_name(self, obj):
+        if obj.sender:
+            name = f"{obj.sender.first_name} {obj.sender.last_name}".strip()
+            return name or obj.sender.email
+        return "Système"

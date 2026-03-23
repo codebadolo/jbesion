@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { selectUser } from '../../store/authSlice.js'
@@ -6,69 +6,437 @@ import { getDashboardData } from '../../api/dashboardAPI.js'
 import StatusBadge from '../../components/Common/StatusBadge.jsx'
 import LoadingSpinner from '../../components/Common/LoadingSpinner.jsx'
 import { formatDate, getFullName } from '../../utils/helpers.js'
-import { VALIDATION_ROLES } from '../../utils/constants.js'
+import {
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  Cell,
+} from 'recharts'
 
-function StatCard({ label, value, icon, color }) {
-  const colorMap = {
-    blue: 'bg-blue-50 text-blue-600 ring-blue-100',
-    yellow: 'bg-yellow-50 text-yellow-600 ring-yellow-100',
-    green: 'bg-green-50 text-green-600 ring-green-100',
-    red: 'bg-red-50 text-red-600 ring-red-100',
-    gray: 'bg-gray-50 text-gray-600 ring-gray-100',
-  }
+// ── Palette ────────────────────────────────────────────────────────────────
+const C_DEEP  = '#162C54'
+const C_MID   = '#3475BB'
+const C_LIGHT = '#37B6E9'
+const C_NIGHT = '#1A4278'
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function monthLabel(ym) {
+  if (!ym) return ''
+  const [y, m] = ym.split('-')
+  const names = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun',
+                 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc']
+  return `${names[parseInt(m, 10) - 1]} ${String(y).slice(2)}`
+}
+
+// ── Sub-components ─────────────────────────────────────────────────────────
+function StatCard({ label, value, sub, icon, accent }) {
   return (
     <div className="card p-5 flex items-center gap-4">
-      <div className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl ring-1 ${colorMap[color] || colorMap.blue}`}>
+      <div
+        className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl"
+        style={{ backgroundColor: `${accent}18`, color: accent }}
+      >
         {icon}
       </div>
       <div>
         <p className="text-2xl font-bold text-gray-900">{value ?? '—'}</p>
         <p className="text-sm text-gray-500 mt-0.5">{label}</p>
+        {sub != null && (
+          <p className="text-xs mt-0.5" style={{ color: accent }}>{sub}</p>
+        )}
       </div>
     </div>
   )
 }
 
-export default function Dashboard() {
-  const navigate = useNavigate()
-  const user = useSelector(selectUser)
-  const userRole = user?.role || user?.role_code
+function Toggle({ value, onChange }) {
+  const options = [
+    { key: 'tous',     label: 'Tous' },
+    { key: 'interne',  label: 'Internes' },
+    { key: 'externe',  label: 'Externes' },
+  ]
+  return (
+    <div
+      className="inline-flex rounded-lg p-0.5 gap-0.5"
+      style={{ backgroundColor: '#EEF2F8' }}
+    >
+      {options.map((opt) => (
+        <button
+          key={opt.key}
+          type="button"
+          onClick={() => onChange(opt.key)}
+          className="px-4 py-1.5 text-sm font-medium rounded-md transition-all duration-150"
+          style={
+            value === opt.key
+              ? { backgroundColor: C_DEEP, color: '#fff', boxShadow: '0 1px 4px rgba(22,44,84,0.25)' }
+              : { color: '#6b7280' }
+          }
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
-  const [data, setData] = React.useState(null)
-  const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState(null)
+const CustomTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-4 py-3 text-sm">
+      <p className="font-semibold text-gray-700 mb-1">{label}</p>
+      {payload.map((p) => (
+        <p key={p.dataKey} style={{ color: p.color }}>
+          {p.name} : <span className="font-bold">{p.value}</span>
+        </p>
+      ))}
+    </div>
+  )
+}
+
+// ── DataTable ───────────────────────────────────────────────────────────────
+function SortIcon({ dir }) {
+  if (!dir) return (
+    <svg className="inline h-3 w-3 ml-1 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l4-4 4 4M16 15l-4 4-4-4" />
+    </svg>
+  )
+  return dir === 'asc' ? (
+    <svg className="inline h-3 w-3 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} style={{ color: C_MID }}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+    </svg>
+  ) : (
+    <svg className="inline h-3 w-3 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} style={{ color: C_MID }}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+    </svg>
+  )
+}
+
+function RecentFichesTable({ rows, view, navigate }) {
+  const [search, setSearch] = useState('')
+  const [sortKey, setSortKey] = useState('created_at')
+  const [sortDir, setSortDir] = useState('desc')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(5)
+
+  const handleSort = (key) => {
+    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortKey(key); setSortDir('asc') }
+    setPage(1)
+  }
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase()
+    return rows
+      .filter((f) => view === 'tous' || f.type === view)
+      .filter((f) =>
+        !q ||
+        String(f.numero || f.id).includes(q) ||
+        (f.created_by_name || '').toLowerCase().includes(q) ||
+        (f.status || '').toLowerCase().includes(q) ||
+        (f.type || '').toLowerCase().includes(q)
+      )
+  }, [rows, view, search])
+
+  const sorted = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      let av = a[sortKey] ?? ''
+      let bv = b[sortKey] ?? ''
+      if (typeof av === 'string') av = av.toLowerCase()
+      if (typeof bv === 'string') bv = bv.toLowerCase()
+      if (av < bv) return sortDir === 'asc' ? -1 : 1
+      if (av > bv) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+  }, [filtered, sortKey, sortDir])
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
+  const safePage = Math.min(page, totalPages)
+  const paged = sorted.slice((safePage - 1) * pageSize, safePage * pageSize)
+
+  // reset page on filter/view change
+  useEffect(() => { setPage(1) }, [search, view, pageSize])
+
+  const cols = [
+    { key: 'id',              label: 'N°' },
+    { key: 'type',            label: 'Type' },
+    { key: 'created_by_name', label: 'Créé par' },
+    { key: 'created_at',      label: 'Date' },
+    { key: 'status',          label: 'Statut' },
+  ]
+
+  if (rows.length === 0) return (
+    <div className="py-12 text-center">
+      <svg className="mx-auto h-10 w-10 text-gray-200 mb-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round"
+          d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m6.75 12H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+      </svg>
+      <p className="text-sm text-gray-400">Aucune fiche pour le moment</p>
+      <button type="button" onClick={() => navigate('/fiches-internes/create')} className="mt-3 inline-block text-sm font-medium" style={{ color: C_LIGHT }}>
+        Créer votre première fiche →
+      </button>
+    </div>
+  )
+
+  return (
+    <div>
+      {/* Toolbar */}
+      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-50">
+        <div className="relative flex-1 max-w-xs">
+          <svg className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+          </svg>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher…"
+            className="w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:border-blue-300"
+            style={{ '--tw-ring-color': C_MID }}
+          />
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-gray-500">
+          <span>Afficher</span>
+          <select
+            value={pageSize}
+            onChange={(e) => setPageSize(Number(e.target.value))}
+            className="rounded border border-gray-200 bg-gray-50 px-1.5 py-1 text-xs focus:outline-none"
+          >
+            {[5, 10, 20, 50].map((n) => <option key={n}>{n}</option>)}
+          </select>
+          <span>par page</span>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-100">
+          <thead>
+            <tr className="bg-gray-50">
+              {cols.map((col) => (
+                <th
+                  key={col.key}
+                  className="table-header cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                  onClick={() => handleSort(col.key)}
+                >
+                  {col.label}
+                  <SortIcon dir={sortKey === col.key ? sortDir : null} />
+                </th>
+              ))}
+              <th className="table-header" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {paged.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="py-8 text-center text-sm text-gray-400">
+                  Aucun résultat pour « {search} »
+                </td>
+              </tr>
+            ) : paged.map((fiche) => (
+              <tr key={`${fiche.type}-${fiche.id}`} className="hover:bg-gray-50 transition-colors">
+                <td className="table-cell font-mono text-xs text-gray-500">
+                  #{fiche.numero || fiche.id}
+                </td>
+                <td className="table-cell">
+                  <span
+                    className="text-xs font-medium px-2 py-0.5 rounded-full"
+                    style={{
+                      backgroundColor: fiche.type === 'interne' ? 'rgba(22,44,84,0.08)' : 'rgba(55,182,233,0.12)',
+                      color: fiche.type === 'interne' ? C_DEEP : C_MID,
+                    }}
+                  >
+                    {fiche.type === 'interne' ? 'Interne' : 'Externe'}
+                  </span>
+                </td>
+                <td className="table-cell">{fiche.created_by_name || '—'}</td>
+                <td className="table-cell text-gray-500">{formatDate(fiche.created_at)}</td>
+                <td className="table-cell">
+                  <StatusBadge status={fiche.status} size="sm" />
+                </td>
+                <td className="table-cell">
+                  <Link
+                    to={`/fiches-${fiche.type === 'interne' ? 'internes' : 'externes'}/${fiche.id}`}
+                    className="text-xs font-medium transition-colors"
+                    style={{ color: C_MID }}
+                  >
+                    Voir →
+                  </Link>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-gray-100 text-xs text-gray-500">
+        <span>
+          {sorted.length === 0 ? '0 résultat' : `${(safePage - 1) * pageSize + 1}–${Math.min(safePage * pageSize, sorted.length)} sur ${sorted.length}`}
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setPage(1)}
+            disabled={safePage === 1}
+            className="px-2 py-1 rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition-colors"
+          >«</button>
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={safePage === 1}
+            className="px-2 py-1 rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition-colors"
+          >‹</button>
+          {Array.from({ length: totalPages }, (_, i) => i + 1)
+            .filter((p) => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
+            .reduce((acc, p, idx, arr) => {
+              if (idx > 0 && p - arr[idx - 1] > 1) acc.push('…')
+              acc.push(p)
+              return acc
+            }, [])
+            .map((p, i) =>
+              p === '…' ? (
+                <span key={`ellipsis-${i}`} className="px-1">…</span>
+              ) : (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPage(p)}
+                  className="px-2.5 py-1 rounded border transition-colors"
+                  style={p === safePage
+                    ? { backgroundColor: C_DEEP, color: '#fff', borderColor: C_DEEP }
+                    : { borderColor: '#e5e7eb' }
+                  }
+                >{p}</button>
+              )
+            )}
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={safePage === totalPages}
+            className="px-2 py-1 rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition-colors"
+          >›</button>
+          <button
+            type="button"
+            onClick={() => setPage(totalPages)}
+            disabled={safePage === totalPages}
+            className="px-2 py-1 rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition-colors"
+          >»</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Main Dashboard ─────────────────────────────────────────────────────────
+export default function Dashboard() {
+  const navigate  = useNavigate()
+  const user      = useSelector(selectUser)
+  const userRole  = user?.role || user?.role_code
+
+  const [data, setData]       = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState(null)
+  const [view, setView]       = useState('tous') // toggle state
 
   useEffect(() => {
     setLoading(true)
     getDashboardData()
-      .then((d) => setData(d))
+      .then(setData)
       .catch(() => setError('Impossible de charger le tableau de bord.'))
       .finally(() => setLoading(false))
   }, [])
 
-  const stats = data?.stats || {}
-  const recentFiches = data?.recent_fiches || []
-  const pendingFiches = data?.pending_fiches || []
-
-  // Show pending section only for roles that validate
-  const canSeePending = ['MANAGER', 'DAF', 'DIRECTOR', 'ADMIN'].includes(userRole)
-
   if (loading) return <LoadingSpinner message="Chargement du tableau de bord..." />
+
+  // ── Derived data ──────────────────────────────────────────────────────────
+  const ci = data?.counts_interne || {}
+  const ce = data?.counts_externe || {}
+  const total = data?.total_fiches || {}
+  const pendingForMe = data?.pending_for_me || {}
+  const recentFiches = data?.recent_fiches || []
+  const monthlyStats = (data?.monthly_stats || []).map((m) => ({
+    ...m,
+    label: monthLabel(m.month),
+  }))
+
+  const pendingInterne = (ci.PENDING_MANAGER || 0) + (ci.PENDING_DAF || 0) + (ci.PENDING_DIRECTOR || 0)
+  const pendingExterne = (ce.PENDING_MANAGER || 0) + (ce.PENDING_DIRECTOR || 0)
+
+  const statsCards = {
+    tous: [
+      { label: 'Total fiches',     value: total.combined,  sub: `${total.internes} int. · ${total.externes} ext.`, accent: C_DEEP,  icon: iconDoc },
+      { label: 'En attente',       value: pendingInterne + pendingExterne, accent: '#D97706', icon: iconClock },
+      { label: 'Approuvées',       value: (ci.APPROVED || 0) + (ce.APPROVED || 0), accent: '#16A34A', icon: iconCheck },
+      { label: 'Rejetées',         value: (ci.REJECTED || 0) + (ce.REJECTED || 0), accent: '#DC2626', icon: iconX },
+    ],
+    interne: [
+      { label: 'Fiches internes',  value: total.internes,  accent: C_DEEP,  icon: iconDoc },
+      { label: 'En attente',       value: pendingInterne,  accent: '#D97706', icon: iconClock },
+      { label: 'Approuvées',       value: ci.APPROVED || 0, accent: '#16A34A', icon: iconCheck },
+      { label: 'Rejetées',         value: ci.REJECTED || 0, accent: '#DC2626', icon: iconX },
+    ],
+    externe: [
+      { label: 'Fiches externes',  value: total.externes,  accent: C_MID,  icon: iconGlobe },
+      { label: 'En attente',       value: pendingExterne,  accent: '#D97706', icon: iconClock },
+      { label: 'Approuvées',       value: ce.APPROVED || 0, accent: '#16A34A', icon: iconCheck },
+      { label: 'Rejetées',         value: ce.REJECTED || 0, accent: '#DC2626', icon: iconX },
+    ],
+  }
+
+  // Bar chart: status distribution
+  const statusBarData = view === 'externe'
+    ? [
+        { name: 'Brouillon',        value: ce.DRAFT || 0 },
+        { name: 'Att. Manager',     value: ce.PENDING_MANAGER || 0 },
+        { name: 'Att. Directeur',   value: ce.PENDING_DIRECTOR || 0 },
+        { name: 'Approuvées',       value: ce.APPROVED || 0 },
+        { name: 'Rejetées',         value: ce.REJECTED || 0 },
+      ]
+    : view === 'interne'
+    ? [
+        { name: 'Brouillon',        value: ci.DRAFT || 0 },
+        { name: 'Att. Manager',     value: ci.PENDING_MANAGER || 0 },
+        { name: 'Att. DAF',         value: ci.PENDING_DAF || 0 },
+        { name: 'Att. Directeur',   value: ci.PENDING_DIRECTOR || 0 },
+        { name: 'Approuvées',       value: ci.APPROVED || 0 },
+        { name: 'Rejetées',         value: ci.REJECTED || 0 },
+      ]
+    : [
+        { name: 'Brouillon',        int: ci.DRAFT || 0,            ext: ce.DRAFT || 0 },
+        { name: 'Att. Manager',     int: ci.PENDING_MANAGER || 0,  ext: ce.PENDING_MANAGER || 0 },
+        { name: 'Att. DAF',         int: ci.PENDING_DAF || 0,      ext: 0 },
+        { name: 'Att. Directeur',   int: ci.PENDING_DIRECTOR || 0, ext: ce.PENDING_DIRECTOR || 0 },
+        { name: 'Approuvées',       int: ci.APPROVED || 0,         ext: ce.APPROVED || 0 },
+        { name: 'Rejetées',         int: ci.REJECTED || 0,         ext: ce.REJECTED || 0 },
+      ]
+
+  const BAR_COLORS = [C_MID, '#64B5F6', '#FFA726', '#FB8C00', '#43A047', '#E53935']
+
+  const canSeePending = ['MANAGER', 'DAF', 'DIRECTOR', 'ADMIN'].includes(userRole)
 
   return (
     <div className="space-y-6">
-      {/* Page header */}
-      <div className="flex items-center justify-between">
+
+      {/* ── Header ──────────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-900">
             Bonjour, {user?.first_name || getFullName(user)} 👋
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Voici un aperçu de l'activité aujourd'hui.
+            Aperçu de l'activité — vue en temps réel
           </p>
         </div>
-        <div className="flex gap-2">
-          <Link to="/fiches/create" className="btn-primary">
+        <div className="flex items-center gap-3 flex-wrap">
+          <Toggle value={view} onChange={setView} />
+          <Link to="/fiches-internes/create" className="btn-primary">
             <svg className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
@@ -83,164 +451,115 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Stats grid */}
+      {/* ── Stats cards ──────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          label="Total fiches"
-          value={stats.total}
-          color="blue"
-          icon={
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round"
-                d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="En attente"
-          value={stats.pending}
-          color="yellow"
-          icon={
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round"
-                d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="Approuvées"
-          value={stats.approved}
-          color="green"
-          icon={
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round"
-                d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="Rejetées"
-          value={stats.rejected}
-          color="red"
-          icon={
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round"
-                d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-            </svg>
-          }
-        />
+        {(statsCards[view] || statsCards.tous).map((s) => (
+          <StatCard key={s.label} {...s} />
+        ))}
       </div>
 
-      {/* Quick actions */}
-      <div className="card p-5">
-        <h2 className="text-sm font-semibold text-gray-700 mb-4">Actions rapides</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => navigate('/fiches/create?type=interne')}
-            className="flex items-center gap-3 p-4 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all group text-left"
-          >
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-600 group-hover:bg-blue-200 transition-colors flex-shrink-0">
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round"
-                  d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-gray-800 group-hover:text-blue-700">
-                Créer une fiche interne
-              </p>
-              <p className="text-xs text-gray-500">Besoins matériels internes</p>
-            </div>
-          </button>
+      {/* ── Charts row ───────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
 
-          <button
-            type="button"
-            onClick={() => navigate('/fiches/create?type=externe')}
-            className="flex items-center gap-3 p-4 rounded-xl border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 transition-all group text-left"
-          >
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600 group-hover:bg-indigo-200 transition-colors flex-shrink-0">
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round"
-                  d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-gray-800 group-hover:text-indigo-700">
-                Créer une fiche externe
-              </p>
-              <p className="text-xs text-gray-500">Prestations & prestataires</p>
-            </div>
-          </button>
+        {/* Area chart — monthly trend */}
+        <div className="card xl:col-span-3 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-gray-700">Évolution mensuelle (6 mois)</h2>
+          </div>
+          <ResponsiveContainer width="100%" height={220}>
+            <AreaChart data={monthlyStats} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+              <defs>
+                <linearGradient id="gradInt" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor={C_DEEP}  stopOpacity={0.25} />
+                  <stop offset="95%" stopColor={C_DEEP}  stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="gradExt" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor={C_LIGHT} stopOpacity={0.25} />
+                  <stop offset="95%" stopColor={C_LIGHT} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              {view !== 'externe' && (
+                <Area
+                  type="monotone"
+                  dataKey="internes"
+                  name="Internes"
+                  stroke={C_DEEP}
+                  strokeWidth={2}
+                  fill="url(#gradInt)"
+                  dot={{ r: 3, fill: C_DEEP }}
+                  activeDot={{ r: 5 }}
+                />
+              )}
+              {view !== 'interne' && (
+                <Area
+                  type="monotone"
+                  dataKey="externes"
+                  name="Externes"
+                  stroke={C_LIGHT}
+                  strokeWidth={2}
+                  fill="url(#gradExt)"
+                  dot={{ r: 3, fill: C_LIGHT }}
+                  activeDot={{ r: 5 }}
+                />
+              )}
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Bar chart — status distribution */}
+        <div className="card xl:col-span-2 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-gray-700">Répartition par statut</h2>
+          </div>
+          <ResponsiveContainer width="100%" height={220}>
+            {view === 'tous' ? (
+              <BarChart data={statusBarData} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="int" name="Internes" fill={C_DEEP} radius={[3, 3, 0, 0]} />
+                <Bar dataKey="ext" name="Externes" fill={C_LIGHT} radius={[3, 3, 0, 0]} />
+              </BarChart>
+            ) : (
+              <BarChart data={statusBarData} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="value" name="Fiches" radius={[3, 3, 0, 0]}>
+                  {statusBarData.map((_, i) => (
+                    <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            )}
+          </ResponsiveContainer>
         </div>
       </div>
 
+      {/* ── Bottom row: recent + pending ─────────────────────────────────── */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+
         {/* Recent fiches */}
         <div className={`card ${canSeePending ? 'xl:col-span-2' : 'xl:col-span-3'}`}>
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
             <h2 className="text-sm font-semibold text-gray-700">Fiches récentes</h2>
-            <Link to="/fiches" className="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors">
+            <Link
+              to={view === 'externe' ? '/fiches-externes' : '/fiches-internes'}
+              className="text-xs font-medium transition-colors"
+              style={{ color: C_MID }}
+            >
               Voir tout →
             </Link>
           </div>
-          <div className="overflow-x-auto">
-            {recentFiches.length === 0 ? (
-              <div className="py-12 text-center">
-                <svg className="mx-auto h-10 w-10 text-gray-200 mb-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round"
-                    d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m6.75 12H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                </svg>
-                <p className="text-sm text-gray-400">Aucune fiche pour le moment</p>
-                <Link to="/fiches/create" className="mt-3 inline-block text-sm font-medium text-blue-600 hover:text-blue-700">
-                  Créer votre première fiche →
-                </Link>
-              </div>
-            ) : (
-              <table className="min-w-full divide-y divide-gray-100">
-                <thead>
-                  <tr className="bg-gray-50">
-                    <th className="table-header">N°</th>
-                    <th className="table-header">Type</th>
-                    <th className="table-header">Créé par</th>
-                    <th className="table-header">Date</th>
-                    <th className="table-header">Statut</th>
-                    <th className="table-header" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {recentFiches.map((fiche) => (
-                    <tr key={`${fiche.type}-${fiche.id}`} className="hover:bg-gray-50 transition-colors">
-                      <td className="table-cell font-mono text-xs text-gray-500">
-                        #{fiche.numero || fiche.id}
-                      </td>
-                      <td className="table-cell">
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full
-                          ${fiche.type === 'interne' || fiche.fiche_type === 'interne'
-                            ? 'bg-blue-50 text-blue-700'
-                            : 'bg-indigo-50 text-indigo-700'}`}>
-                          {fiche.type === 'interne' || fiche.fiche_type === 'interne' ? 'Interne' : 'Externe'}
-                        </span>
-                      </td>
-                      <td className="table-cell">{getFullName(fiche.created_by || fiche.user)}</td>
-                      <td className="table-cell text-gray-500">{formatDate(fiche.created_at)}</td>
-                      <td className="table-cell">
-                        <StatusBadge status={fiche.status} size="sm" />
-                      </td>
-                      <td className="table-cell">
-                        <Link
-                          to={`/fiches-${fiche.type === 'interne' || fiche.fiche_type === 'interne' ? 'internes' : 'externes'}/${fiche.id}`}
-                          className="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
-                        >
-                          Voir →
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
+          <RecentFichesTable rows={recentFiches} view={view} navigate={navigate} />
         </div>
 
         {/* Pending fiches (managers/DAF/director) */}
@@ -249,15 +568,18 @@ export default function Dashboard() {
             <div className="px-6 py-4 border-b border-gray-100">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-gray-700">À valider</h2>
-                {pendingFiches.length > 0 && (
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-yellow-500 text-white text-xs font-bold">
-                    {pendingFiches.length}
+                {pendingForMe.total > 0 && (
+                  <span
+                    className="flex h-5 w-5 items-center justify-center rounded-full text-white text-xs font-bold"
+                    style={{ backgroundColor: '#D97706' }}
+                  >
+                    {pendingForMe.total}
                   </span>
                 )}
               </div>
             </div>
             <div className="p-4 space-y-2">
-              {pendingFiches.length === 0 ? (
+              {pendingForMe.total === 0 ? (
                 <div className="py-8 text-center">
                   <svg className="mx-auto h-8 w-8 text-gray-200 mb-2" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round"
@@ -266,24 +588,72 @@ export default function Dashboard() {
                   <p className="text-xs text-gray-400">Aucune fiche en attente</p>
                 </div>
               ) : (
-                pendingFiches.map((fiche) => (
-                  <Link
-                    key={`${fiche.type}-${fiche.id}`}
-                    to={`/fiches-${fiche.type === 'interne' ? 'internes' : 'externes'}/${fiche.id}`}
-                    className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-blue-200 hover:bg-blue-50 transition-all group"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate group-hover:text-blue-700">
-                        #{fiche.numero || fiche.id}
-                      </p>
-                      <p className="text-xs text-gray-500 truncate">
-                        {getFullName(fiche.created_by || fiche.user)}
-                      </p>
-                    </div>
-                    <StatusBadge status={fiche.status} size="sm" />
-                  </Link>
-                ))
+                <>
+                  {pendingForMe.fiches_internes > 0 && (
+                    <Link
+                      to="/fiches-internes"
+                      className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-all group"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">Fiches internes</p>
+                        <p className="text-xs text-gray-500">En attente de votre validation</p>
+                      </div>
+                      <span
+                        className="flex h-6 w-6 items-center justify-center rounded-full text-white text-xs font-bold flex-shrink-0"
+                        style={{ backgroundColor: C_DEEP }}
+                      >
+                        {pendingForMe.fiches_internes}
+                      </span>
+                    </Link>
+                  )}
+                  {pendingForMe.fiches_externes > 0 && (
+                    <Link
+                      to="/fiches-externes"
+                      className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-all group"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">Fiches externes</p>
+                        <p className="text-xs text-gray-500">En attente de votre validation</p>
+                      </div>
+                      <span
+                        className="flex h-6 w-6 items-center justify-center rounded-full text-white text-xs font-bold flex-shrink-0"
+                        style={{ backgroundColor: C_LIGHT }}
+                      >
+                        {pendingForMe.fiches_externes}
+                      </span>
+                    </Link>
+                  )}
+                </>
               )}
+            </div>
+
+            {/* Quick actions */}
+            <div className="px-4 pb-4 pt-2 border-t border-gray-100 space-y-2">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Actions rapides</p>
+              <button
+                type="button"
+                onClick={() => navigate('/fiches-internes/create')}
+                className="flex w-full items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-gray-200 hover:bg-gray-50 transition-all text-left"
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg flex-shrink-0" style={{ backgroundColor: 'rgba(22,44,84,0.08)', color: C_DEEP }}>
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                </div>
+                <p className="text-sm font-medium text-gray-700">Nouvelle fiche interne</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/fiches-externes/create')}
+                className="flex w-full items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-gray-200 hover:bg-gray-50 transition-all text-left"
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg flex-shrink-0" style={{ backgroundColor: 'rgba(55,182,233,0.1)', color: C_LIGHT }}>
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                </div>
+                <p className="text-sm font-medium text-gray-700">Nouvelle fiche externe</p>
+              </button>
             </div>
           </div>
         )}
@@ -291,3 +661,32 @@ export default function Dashboard() {
     </div>
   )
 }
+
+// ── Icons ──────────────────────────────────────────────────────────────────
+const iconDoc = (
+  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round"
+      d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+  </svg>
+)
+const iconClock = (
+  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+  </svg>
+)
+const iconCheck = (
+  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+  </svg>
+)
+const iconX = (
+  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+  </svg>
+)
+const iconGlobe = (
+  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round"
+      d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418" />
+  </svg>
+)

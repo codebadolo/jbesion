@@ -29,3 +29,28 @@ export const logout = (refresh) =>
     .post('/auth/logout/', { refresh })
     .then((r) => r.data)
     .catch(() => null) // best-effort
+
+/**
+ * Update current user profile (text fields).
+ */
+export const updateProfile = (data) =>
+  axiosInstance.patch('/auth/me/', data).then((r) => r.data)
+
+/**
+ * Upload avatar (multipart/form-data).
+ */
+export const uploadAvatar = (file) => {
+  const formData = new FormData()
+  formData.append('avatar', file)
+  return axiosInstance
+    .patch('/auth/me/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    .then((r) => r.data)
+}
+
+/**
+ * Change password.
+ */
+export const changePassword = (data) =>
+  axiosInstance.post('/auth/me/change_password/', data).then((r) => r.data)

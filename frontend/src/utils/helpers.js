@@ -14,17 +14,17 @@ export function formatDate(date) {
 }
 
 /**
- * Format a number as a French-locale currency string (MAD by default).
+ * Format a number as a Franc CFA (XOF) currency string.
  */
-export function formatMontant(amount, currency = 'MAD') {
+export function formatMontant(amount) {
   if (amount === null || amount === undefined || amount === '') return '—'
   const num = parseFloat(amount)
   if (isNaN(num)) return '—'
-  return new Intl.NumberFormat('fr-MA', {
+  return new Intl.NumberFormat('fr-FR', {
     style: 'currency',
-    currency: currency === 'MAD' ? 'MAD' : currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    currency: 'XOF',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   }).format(num)
 }
 
@@ -71,6 +71,24 @@ export function getStatusColor(status) {
       text: 'text-red-800',
       ring: 'ring-red-600/20',
       dot: 'bg-red-500',
+    },
+    amber: {
+      bg: 'bg-amber-50',
+      text: 'text-amber-800',
+      ring: 'ring-amber-600/20',
+      dot: 'bg-amber-500',
+    },
+    purple: {
+      bg: 'bg-purple-50',
+      text: 'text-purple-800',
+      ring: 'ring-purple-600/20',
+      dot: 'bg-purple-500',
+    },
+    teal: {
+      bg: 'bg-teal-50',
+      text: 'text-teal-800',
+      ring: 'ring-teal-600/20',
+      dot: 'bg-teal-500',
     },
   }
 

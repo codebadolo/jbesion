@@ -32,6 +32,39 @@ export const fetchCurrentUser = createAsyncThunk(
   },
 )
 
+export const updateProfile = createAsyncThunk(
+  'auth/updateProfile',
+  async (data, { rejectWithValue }) => {
+    try {
+      return await authAPI.updateProfile(data)
+    } catch (err) {
+      return rejectWithValue(err.response?.data || 'Erreur lors de la mise à jour du profil')
+    }
+  },
+)
+
+export const uploadAvatar = createAsyncThunk(
+  'auth/uploadAvatar',
+  async (file, { rejectWithValue }) => {
+    try {
+      return await authAPI.uploadAvatar(file)
+    } catch (err) {
+      return rejectWithValue(err.response?.data || "Erreur lors de l'upload de l'avatar")
+    }
+  },
+)
+
+export const changePassword = createAsyncThunk(
+  'auth/changePassword',
+  async (data, { rejectWithValue }) => {
+    try {
+      return await authAPI.changePassword(data)
+    } catch (err) {
+      return rejectWithValue(err.response?.data || 'Erreur lors du changement de mot de passe')
+    }
+  },
+)
+
 export const logoutUser = createAsyncThunk(
   'auth/logoutUser',
   async (_, { getState }) => {
@@ -118,6 +151,17 @@ const authSlice = createSlice({
         localStorage.removeItem('token')
         localStorage.removeItem('refreshToken')
         localStorage.removeItem('user')
+      })
+
+    // updateProfile / uploadAvatar
+    builder
+      .addCase(updateProfile.fulfilled, (state, action) => {
+        state.user = action.payload
+        localStorage.setItem('user', JSON.stringify(action.payload))
+      })
+      .addCase(uploadAvatar.fulfilled, (state, action) => {
+        state.user = action.payload
+        localStorage.setItem('user', JSON.stringify(action.payload))
       })
 
     // logoutUser

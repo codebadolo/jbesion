@@ -11,7 +11,7 @@ import {
 import { selectUser } from '../../store/authSlice.js'
 import StatusBadge from '../../components/Common/StatusBadge.jsx'
 import LoadingSpinner from '../../components/Common/LoadingSpinner.jsx'
-import { formatDate, getFullName } from '../../utils/helpers.js'
+import { formatDate } from '../../utils/helpers.js'
 import { STATUS_LABELS } from '../../utils/constants.js'
 
 const TABS = [
@@ -194,24 +194,26 @@ export default function FichesList() {
               </thead>
               <tbody className="divide-y divide-gray-50 bg-white">
                 {filtered.map((fiche) => {
-                  const isOwner = fiche.created_by?.id === user?.id || fiche.user?.id === user?.id
+                  const isOwner = fiche.created_by === user?.id
                   return (
                     <tr key={fiche.id} className="hover:bg-gray-50 transition-colors">
                       <td className="table-cell">
                         <span className="font-mono text-xs text-gray-500">
-                          #{fiche.numero || fiche.id}
+                          #{fiche.id}
                         </span>
                       </td>
                       <td className="table-cell">
                         <div className="flex items-center gap-2">
                           <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700 text-xs font-bold">
-                            {(
-                              (fiche.created_by?.first_name?.[0] || fiche.user?.first_name?.[0] || '') +
-                              (fiche.created_by?.last_name?.[0] || fiche.user?.last_name?.[0] || '')
-                            ).toUpperCase() || '?'}
+                            {(fiche.created_by_name || '')
+                              .split(' ')
+                              .map((w) => w[0] || '')
+                              .slice(0, 2)
+                              .join('')
+                              .toUpperCase() || '?'}
                           </div>
                           <span className="font-medium text-gray-800">
-                            {getFullName(fiche.created_by || fiche.user)}
+                            {fiche.created_by_name || '—'}
                           </span>
                           {isOwner && (
                             <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">
@@ -221,10 +223,7 @@ export default function FichesList() {
                         </div>
                       </td>
                       <td className="table-cell text-gray-500">
-                        {fiche.department?.name ||
-                          fiche.created_by?.department?.name ||
-                          fiche.user?.department?.name ||
-                          '—'}
+                        {fiche.department_detail?.name || '—'}
                       </td>
                       <td className="table-cell text-gray-500">
                         {formatDate(fiche.created_at)}
@@ -233,7 +232,7 @@ export default function FichesList() {
                         <StatusBadge status={fiche.status} size="sm" />
                       </td>
                       <td className="table-cell text-gray-500">
-                        {fiche.items?.length ?? fiche.items_count ?? '—'}
+                        {fiche.item_count ?? '—'}
                       </td>
                       <td className="table-cell">
                         <Link

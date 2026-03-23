@@ -97,11 +97,58 @@ export const validateFiche = createAsyncThunk(
   },
 )
 
+export const executeFiche = createAsyncThunk(
+  'fiches/executeFiche',
+  async ({ id, type, data }, { rejectWithValue }) => {
+    try {
+      const result =
+        type === 'interne'
+          ? await fichesAPI.executeFicheInterne(id, data)
+          : await fichesAPI.executeFicheExterne(id, data)
+      return result
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.detail || "Erreur lors de l'exécution")
+    }
+  },
+)
+
+export const markReceived = createAsyncThunk(
+  'fiches/markReceived',
+  async ({ id, type }, { rejectWithValue }) => {
+    try {
+      const result =
+        type === 'interne'
+          ? await fichesAPI.markReceivedFicheInterne(id)
+          : await fichesAPI.markReceivedFicheExterne(id)
+      return result
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.detail || 'Erreur lors de la réception')
+    }
+  },
+)
+
+export const respondClarification = createAsyncThunk(
+  'fiches/respondClarification',
+  async ({ id, type, data }, { rejectWithValue }) => {
+    try {
+      const result =
+        type === 'interne'
+          ? await fichesAPI.respondClarificationFicheInterne(id, data)
+          : await fichesAPI.respondClarificationFicheExterne(id, data)
+      return result
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.detail || 'Erreur lors de la réponse')
+    }
+  },
+)
+
 // ── Slice ────────────────────────────────────────────────────────────────────
 
 const initialState = {
   fichesInternes: [],
+  fichesInternesCount: 0,
   fichesExternes: [],
+  fichesExternesCount: 0,
   currentFiche: null,
   isLoading: false,
   error: null,
@@ -129,10 +176,13 @@ const fichesSlice = createSlice({
         state.isLoading = false
         const { type, data } = action.payload
         const list = Array.isArray(data) ? data : data.results ?? []
+        const count = Array.isArray(data) ? data.length : (data.count ?? list.length)
         if (type === 'interne') {
           state.fichesInternes = list
+          state.fichesInternesCount = count
         } else {
           state.fichesExternes = list
+          state.fichesExternesCount = count
         }
       })
       .addCase(fetchFiches.rejected, (state, action) => {
@@ -221,6 +271,24 @@ const fichesSlice = createSlice({
         state.isLoading = false
         state.error = action.payload
       })
+
+    // executeFiche
+    builder
+      .addCase(executeFiche.pending, (state) => { state.isLoading = true; state.error = null })
+      .addCase(executeFiche.fulfilled, (state, action) => { state.isLoading = false; state.currentFiche = action.payload })
+      .addCase(executeFiche.rejected, (state, action) => { state.isLoading = false; state.error = action.payload })
+
+    // markReceived
+    builder
+      .addCase(markReceived.pending, (state) => { state.isLoading = true; state.error = null })
+      .addCase(markReceived.fulfilled, (state, action) => { state.isLoading = false; state.currentFiche = action.payload })
+      .addCase(markReceived.rejected, (state, action) => { state.isLoading = false; state.error = action.payload })
+
+    // respondClarification
+    builder
+      .addCase(respondClarification.pending, (state) => { state.isLoading = true; state.error = null })
+      .addCase(respondClarification.fulfilled, (state, action) => { state.isLoading = false; state.currentFiche = action.payload })
+      .addCase(respondClarification.rejected, (state, action) => { state.isLoading = false; state.error = action.payload })
   },
 })
 
@@ -229,7 +297,9 @@ export default fichesSlice.reducer
 
 // ── Selectors ────────────────────────────────────────────────────────────────
 export const selectFichesInternes = (state) => state.fiches.fichesInternes
+export const selectFichesInternesCount = (state) => state.fiches.fichesInternesCount
 export const selectFichesExternes = (state) => state.fiches.fichesExternes
+export const selectFichesExternesCount = (state) => state.fiches.fichesExternesCount
 export const selectCurrentFiche = (state) => state.fiches.currentFiche
 export const selectFichesLoading = (state) => state.fiches.isLoading
 export const selectFichesError = (state) => state.fiches.error

@@ -4,8 +4,7 @@
 
 @layer base {
   html {
-    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
-      Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    font-family: 'Open Sans', system-ui, -apple-system, sans-serif;
   }
 
   body {
@@ -14,18 +13,23 @@
 }
 
 @layer components {
+  /* ── Buttons ──────────────────────────────────────────────────────────── */
   .btn-primary {
     @apply inline-flex items-center justify-center px-4 py-2 border border-transparent
-      text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700
-      focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
+      text-sm font-medium rounded-lg text-white
+      focus:outline-none focus:ring-2 focus:ring-offset-2
       transition-colors duration-200 disabled:opacity-60 disabled:cursor-not-allowed;
+    background-color: #37B6E9;
+    &:hover { background-color: #3475BB; }
+    &:focus { --tw-ring-color: #37B6E9; }
   }
 
   .btn-secondary {
     @apply inline-flex items-center justify-center px-4 py-2 border border-gray-300
       text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50
-      focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
+      focus:outline-none focus:ring-2 focus:ring-offset-2
       transition-colors duration-200 disabled:opacity-60 disabled:cursor-not-allowed;
+    &:focus { --tw-ring-color: #37B6E9; }
   }
 
   .btn-danger {
@@ -42,23 +46,30 @@
       transition-colors duration-200 disabled:opacity-60 disabled:cursor-not-allowed;
   }
 
+  /* ── Forms ────────────────────────────────────────────────────────────── */
   .form-input {
     @apply block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm
       text-gray-900 placeholder-gray-400 shadow-sm
-      focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500
+      focus:outline-none focus:ring-1
       transition-colors duration-150;
+    &:focus {
+      border-color: #37B6E9;
+      --tw-ring-color: #37B6E9;
+    }
   }
 
   .form-label {
     @apply block text-sm font-medium text-gray-700 mb-1;
   }
 
+  /* ── Cards & Tables ───────────────────────────────────────────────────── */
   .card {
     @apply bg-white rounded-xl shadow-sm border border-gray-200;
   }
 
   .table-header {
-    @apply px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider;
+    @apply px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider;
+    color: #3475BB;
   }
 
   .table-cell {

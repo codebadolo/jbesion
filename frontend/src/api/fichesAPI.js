@@ -20,6 +20,15 @@ export const submitFicheInterne = (id) =>
 export const validateFicheInterne = (id, data) =>
   axiosInstance.post(`/fiches-internes/${id}/validate/`, data).then((r) => r.data)
 
+export const executeFicheInterne = (id, data) =>
+  axiosInstance.post(`/fiches-internes/${id}/execute/`, data).then((r) => r.data)
+
+export const markReceivedFicheInterne = (id) =>
+  axiosInstance.post(`/fiches-internes/${id}/mark_received/`).then((r) => r.data)
+
+export const respondClarificationFicheInterne = (id, data) =>
+  axiosInstance.post(`/fiches-internes/${id}/respond_clarification/`, data).then((r) => r.data)
+
 // ── Fiches Externes ──────────────────────────────────────────────────────────
 
 export const getFichesExternes = (params) =>
@@ -39,3 +48,12 @@ export const submitFicheExterne = (id) =>
 
 export const validateFicheExterne = (id, data) =>
   axiosInstance.post(`/fiches-externes/${id}/validate/`, data).then((r) => r.data)
+
+export const executeFicheExterne = (id, data) =>
+  axiosInstance.post(`/fiches-externes/${id}/execute/`, data).then((r) => r.data)
+
+export const markReceivedFicheExterne = (id) =>
+  axiosInstance.post(`/fiches-externes/${id}/mark_received/`).then((r) => r.data)
+
+export const respondClarificationFicheExterne = (id, data) =>
+  axiosInstance.post(`/fiches-externes/${id}/respond_clarification/`, data).then((r) => r.data)

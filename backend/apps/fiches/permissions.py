@@ -42,16 +42,16 @@ class CanValidateFicheInterne(BasePermission):
     Mapping:
       PENDING_MANAGER  → MANAGER
       PENDING_DAF      → DAF
-      PENDING_DIRECTOR → DIRECTOR
+      PENDING_DIRECTOR → DIRECTOR or DAF (DAF can substitute for Director)
     """
 
     message = "Vous n'êtes pas autorisé à valider cette fiche à ce stade."
 
-    # Map fiche status → required user role
+    # Map fiche status → required user role(s)
     STATUS_ROLE_MAP = {
-        FicheInterneStatus.PENDING_MANAGER:  Role.MANAGER,
-        FicheInterneStatus.PENDING_DAF:      Role.DAF,
-        FicheInterneStatus.PENDING_DIRECTOR: Role.DIRECTOR,
+        FicheInterneStatus.PENDING_MANAGER:  [Role.MANAGER],
+        FicheInterneStatus.PENDING_DAF:      [Role.DAF],
+        FicheInterneStatus.PENDING_DIRECTOR: [Role.DIRECTOR, Role.DAF],
     }
 
     def has_object_permission(self, request, view, obj) -> bool:
@@ -61,12 +61,31 @@ class CanValidateFicheInterne(BasePermission):
         if user.role == Role.ADMIN or user.is_staff:
             return True
 
-        required_role = self.STATUS_ROLE_MAP.get(obj.status)
-        if required_role is None:
+        allowed_roles = self.STATUS_ROLE_MAP.get(obj.status)
+        if allowed_roles is None:
             # Fiche is not in a state that accepts validation
             return False
 
-        return user.role == required_role
+        return user.role in allowed_roles
+
+
+class CanExecuteFiche(BasePermission):
+    """
+    DAF, Admin, or any member of the Admin & Finance department (code AF)
+    can execute an APPROVED fiche.
+    """
+
+    message = "Seule la comptabilité (Admin & Finance) peut exécuter cette fiche."
+
+    def has_object_permission(self, request, view, obj) -> bool:
+        user = request.user
+        if user.role == Role.ADMIN or user.is_staff:
+            return True
+        if user.role == Role.DAF:
+            return True
+        if user.department and user.department.code == "AF":
+            return True
+        return False
 
 
 class CanValidateFicheExterne(BasePermission):

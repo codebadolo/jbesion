@@ -14,10 +14,10 @@ from django.db import models
 
 class Role(models.TextChoices):
     """All possible roles within the organisation."""
-    EMPLOYEE = "EMPLOYEE", "Employé"
-    MANAGER = "MANAGER", "Manager"
+    EMPLOYEE = "EMPLOYEE", "Collaborateur"
+    MANAGER = "MANAGER", "Supérieur Hiérarchique"
     DAF = "DAF", "Directeur Administratif et Financier"
-    DIRECTOR = "DIRECTOR", "Directeur Général"
+    DIRECTOR = "DIRECTOR", "DG"
     ADMIN = "ADMIN", "Administrateur"
 
 

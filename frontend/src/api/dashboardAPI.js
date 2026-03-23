@@ -5,4 +5,4 @@ import axiosInstance from './axios.js'
  * { stats, recent_fiches, pending_fiches }
  */
 export const getDashboardData = () =>
-  axiosInstance.get('/dashboard/').then((r) => r.data)
+  axiosInstance.get('/dashboard/stats/').then((r) => r.data)

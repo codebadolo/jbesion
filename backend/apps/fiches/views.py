@@ -6,8 +6,13 @@ FicheExterneViewSet  — same structure, different workflow
 DashboardView        — aggregated statistics
 """
 
+from datetime import date
+from django.utils import timezone
+
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import QuerySet, Count, Q
+from django.db.models.functions import TruncMonth
+from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -15,20 +20,24 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.models import Role
+from apps.accounts.models import Role, User
 from .models import (
     FicheInterne,
     FicheInterneStatus,
     FicheExterne,
     FicheExterneStatus,
     Validation,
+    Notification,
+    NotificationType,
     FicheType,
     ValidationStatus,
 )
+from .pagination import FichePageNumberPagination
 from .permissions import (
     IsOwnerOrReadOnly,
     CanValidateFicheInterne,
     CanValidateFicheExterne,
+    CanExecuteFiche,
 )
 from .serializers import (
     FicheInterneSerializer,
@@ -36,8 +45,38 @@ from .serializers import (
     FicheExterneSerializer,
     FicheExterneListSerializer,
     ValidateActionSerializer,
+    RespondClarificationSerializer,
     ValidationSerializer,
+    NotificationSerializer,
 )
+
+
+# ---------------------------------------------------------------------------
+# Notification helpers
+# ---------------------------------------------------------------------------
+
+def _notify(recipients, sender, message, notif_type, fiche_type, fiche_id):
+    """Create Notification records for each recipient (skip sender)."""
+    for user in recipients:
+        if user != sender:
+            Notification.objects.create(
+                recipient=user,
+                sender=sender,
+                message=message,
+                notification_type=notif_type,
+                fiche_type=fiche_type,
+                fiche_id=fiche_id,
+            )
+
+
+def _dept_managers(department):
+    """Return active MANAGERs belonging to a department."""
+    return list(User.objects.filter(role=Role.MANAGER, department=department, is_active=True))
+
+
+def _users_by_role(*roles):
+    """Return all active users with any of the given roles."""
+    return list(User.objects.filter(role__in=roles, is_active=True))
 
 
 # ---------------------------------------------------------------------------
@@ -80,6 +119,7 @@ class FicheInterneViewSet(viewsets.ModelViewSet):
     """
 
     permission_classes = [IsAuthenticated]
+    pagination_class = FichePageNumberPagination
 
     def get_queryset(self) -> QuerySet:
         user = self.request.user
@@ -87,17 +127,38 @@ class FicheInterneViewSet(viewsets.ModelViewSet):
             "created_by", "department"
         ).prefetch_related("items")
 
-        if user.role == Role.EMPLOYEE:
-            return qs.filter(created_by=user)
+        # Admin & Finance department members see all fiches (they handle execution)
+        in_admin_finance = user.department and user.department.code == "AF"
 
-        if user.role == Role.MANAGER:
-            # Own fiches + fiches of direct subordinates
-            subordinate_ids = user.subordinates.values_list("id", flat=True)
-            return qs.filter(
-                Q(created_by=user) | Q(created_by__in=subordinate_ids)
+        if user.role in (Role.DAF, Role.DIRECTOR, Role.ADMIN) or in_admin_finance:
+            pass  # see everything
+        elif user.role == Role.MANAGER:
+            # See all fiches from own department
+            if user.department:
+                qs = qs.filter(department=user.department)
+            else:
+                qs = qs.filter(created_by=user)
+        else:
+            qs = qs.filter(created_by=user)
+
+        # Optional filters from query params
+        created_by_id = self.request.query_params.get("created_by")
+        if created_by_id:
+            qs = qs.filter(created_by__id=created_by_id)
+
+        status_param = self.request.query_params.get("status")
+        if status_param:
+            qs = qs.filter(status=status_param)
+
+        search_param = self.request.query_params.get("search", "").strip()
+        if search_param:
+            qs = qs.filter(
+                Q(created_by__first_name__icontains=search_param) |
+                Q(created_by__last_name__icontains=search_param) |
+                Q(department__name__icontains=search_param) |
+                Q(notes__icontains=search_param)
             )
 
-        # DAF, DIRECTOR, ADMIN see everything
         return qs
 
     def get_serializer_class(self):
@@ -110,6 +171,8 @@ class FicheInterneViewSet(viewsets.ModelViewSet):
             return [IsAuthenticated(), IsOwnerOrReadOnly()]
         if self.action == "validate":
             return [IsAuthenticated(), CanValidateFicheInterne()]
+        if self.action == "execute":
+            return [IsAuthenticated(), CanExecuteFiche()]
         return [IsAuthenticated()]
 
     # ------------------------------------------------------------------
@@ -190,16 +253,16 @@ class FicheInterneViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def validate(self, request: Request, pk=None) -> Response:
         """
-        Approve or reject a fiche.
+        Approve, reject, or request clarification on a fiche.
 
-        Body: { "action": "approve"|"reject", "commentaire": "..." }
+        Body: { "action": "approve"|"reject"|"request_clarification", "commentaire": "..." }
 
-        On approval the status advances to the next step.
-        On rejection the status moves to REJECTED.
+        approve              → advance to next step (FAVORABLE at PENDING_MANAGER)
+        reject               → move to REJECTED, notify creator
+        request_clarification→ move to PENDING_CLARIFICATION_*, notify department managers
         """
         fiche: FicheInterne = self.get_object()
 
-        # Permission check (also done by CanValidateFicheInterne)
         valid_statuses = list(INTERNE_NEXT_STATUS.keys())
         if fiche.status not in valid_statuses:
             return Response(
@@ -214,13 +277,36 @@ class FicheInterneViewSet(viewsets.ModelViewSet):
         commentaire = action_serializer.validated_data.get("commentaire", "")
         user = request.user
 
-        # Determine new status
+        # Clarification only allowed from DAF or DIRECTOR step, not MANAGER
+        if act == "request_clarification" and fiche.status == FicheInterneStatus.PENDING_MANAGER:
+            return Response(
+                {"detail": "La demande de clarification n'est pas disponible à cette étape."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if act == "request_clarification" and not commentaire:
+            return Response(
+                {"detail": "Un commentaire est requis pour demander une clarification."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Determine new status and decision
         if act == "approve":
             new_status = INTERNE_NEXT_STATUS[fiche.status]
-            decision = ValidationStatus.APPROVED
-        else:
+            # Manager's approve = Favorable; others = Approved
+            decision = (
+                ValidationStatus.FAVORABLE
+                if fiche.status == FicheInterneStatus.PENDING_MANAGER
+                else ValidationStatus.APPROVED
+            )
+        elif act == "reject":
             new_status = FicheInterneStatus.REJECTED
             decision = ValidationStatus.REJECTED
+        else:  # request_clarification
+            if fiche.status == FicheInterneStatus.PENDING_DAF:
+                new_status = FicheInterneStatus.PENDING_CLARIFICATION_DAF
+            else:
+                new_status = FicheInterneStatus.PENDING_CLARIFICATION_DIR
+            decision = ValidationStatus.CLARIFICATION_REQUESTED
 
         # Record validation
         ct = ContentType.objects.get_for_model(FicheInterne)
@@ -236,6 +322,110 @@ class FicheInterneViewSet(viewsets.ModelViewSet):
 
         fiche.status = new_status
         fiche.save(update_fields=["status", "updated_at"])
+
+        # ── Notifications ──────────────────────────────────────────
+        ref = f"FI-{fiche.pk:05d}"
+        if act == "approve":
+            if new_status == FicheInterneStatus.PENDING_DAF:
+                _notify(
+                    _users_by_role(Role.DAF), user,
+                    f"La fiche {ref} a reçu un avis favorable et attend votre approbation.",
+                    NotificationType.FAVORABLE, FicheType.INTERNE, fiche.pk,
+                )
+            elif new_status == FicheInterneStatus.PENDING_DIRECTOR:
+                _notify(
+                    _users_by_role(Role.DIRECTOR), user,
+                    f"La fiche {ref} a été approuvée par le DAF et attend votre validation.",
+                    NotificationType.APPROVED, FicheType.INTERNE, fiche.pk,
+                )
+            elif new_status == FicheInterneStatus.APPROVED:
+                _notify(
+                    [fiche.created_by], user,
+                    f"Votre fiche {ref} a été approuvée et est prête pour l'exécution.",
+                    NotificationType.APPROVED, FicheType.INTERNE, fiche.pk,
+                )
+        elif act == "reject":
+            _notify(
+                [fiche.created_by], user,
+                f"Votre fiche {ref} a été rejetée. Motif : {commentaire or '—'}",
+                NotificationType.REJECTED, FicheType.INTERNE, fiche.pk,
+            )
+        else:  # request_clarification
+            managers = _dept_managers(fiche.department)
+            _notify(
+                managers, user,
+                f"Une clarification est demandée pour la fiche {ref} : {commentaire}",
+                NotificationType.CLARIFICATION_REQUEST, FicheType.INTERNE, fiche.pk,
+            )
+
+        return Response(
+            FicheInterneSerializer(fiche, context={"request": request}).data,
+            status=status.HTTP_200_OK,
+        )
+
+    # ------------------------------------------------------------------
+    # POST /{id}/respond_clarification/
+    # ------------------------------------------------------------------
+    @action(detail=True, methods=["post"], url_path="respond_clarification")
+    def respond_clarification(self, request: Request, pk=None) -> Response:
+        """
+        Manager responds to a clarification request on behalf of the collaborator.
+
+        Body: { "commentaire": "..." }
+        Fiche moves back to PENDING_DAF or PENDING_DIRECTOR.
+        """
+        fiche: FicheInterne = self.get_object()
+        user = request.user
+
+        if not (user.role == Role.MANAGER or user.role == Role.ADMIN or user.is_staff):
+            return Response(
+                {"detail": "Seul le Supérieur Hiérarchique peut répondre aux demandes de clarification."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        clarification_back = {
+            FicheInterneStatus.PENDING_CLARIFICATION_DAF: FicheInterneStatus.PENDING_DAF,
+            FicheInterneStatus.PENDING_CLARIFICATION_DIR: FicheInterneStatus.PENDING_DIRECTOR,
+        }
+        if fiche.status not in clarification_back:
+            return Response(
+                {"detail": "Cette fiche n'est pas en attente de clarification."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = RespondClarificationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        commentaire = serializer.validated_data["commentaire"]
+
+        ct = ContentType.objects.get_for_model(FicheInterne)
+        Validation.objects.create(
+            fiche_type=FicheType.INTERNE,
+            content_type=ct,
+            object_id=fiche.pk,
+            validator=user,
+            role_at_validation=user.role,
+            status=ValidationStatus.CLARIFICATION_RESPONDED,
+            commentaire=commentaire,
+        )
+
+        new_status = clarification_back[fiche.status]
+        was_daf_step = new_status == FicheInterneStatus.PENDING_DAF
+        fiche.status = new_status
+        fiche.save(update_fields=["status", "updated_at"])
+
+        ref = f"FI-{fiche.pk:05d}"
+        if was_daf_step:
+            _notify(
+                _users_by_role(Role.DAF), user,
+                f"Clarification fournie pour la fiche {ref}. Elle est de nouveau en attente de votre approbation.",
+                NotificationType.CLARIFICATION_RESPONSE, FicheType.INTERNE, fiche.pk,
+            )
+        else:
+            _notify(
+                _users_by_role(Role.DIRECTOR, Role.DAF), user,
+                f"Clarification fournie pour la fiche {ref}. Elle est de nouveau en attente de validation DG.",
+                NotificationType.CLARIFICATION_RESPONSE, FicheType.INTERNE, fiche.pk,
+            )
 
         return Response(
             FicheInterneSerializer(fiche, context={"request": request}).data,
@@ -256,6 +446,72 @@ class FicheInterneViewSet(viewsets.ModelViewSet):
         serializer = ValidationSerializer(qs, many=True, context={"request": request})
         return Response(serializer.data)
 
+    # ------------------------------------------------------------------
+    # POST /{id}/execute/
+    # ------------------------------------------------------------------
+    @action(detail=True, methods=["post"])
+    def execute(self, request: Request, pk=None) -> Response:
+        """Comptabilité (DAF) marque la fiche comme exécutée (décaissement + commande passée)."""
+        fiche: FicheInterne = self.get_object()
+
+        if fiche.status != FicheInterneStatus.APPROVED:
+            return Response(
+                {"detail": "Seules les fiches approuvées peuvent être exécutées."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        fiche.status = FicheInterneStatus.IN_EXECUTION
+        fiche.executed_by = request.user
+        fiche.executed_at = timezone.now()
+        fiche.execution_fournisseur = request.data.get("execution_fournisseur", "")
+        fiche.execution_reference = request.data.get("execution_reference", "")
+        fiche.execution_montant = request.data.get("execution_montant") or None
+        fiche.execution_mode_paiement = request.data.get("execution_mode_paiement", "")
+        fiche.execution_numero_facture = request.data.get("execution_numero_facture", "")
+        fiche.execution_note = request.data.get("execution_note", "")
+        fiche.save(update_fields=[
+            "status", "executed_by", "executed_at",
+            "execution_fournisseur", "execution_reference", "execution_montant",
+            "execution_mode_paiement", "execution_numero_facture", "execution_note",
+            "updated_at",
+        ])
+
+        return Response(
+            FicheInterneSerializer(fiche, context={"request": request}).data,
+            status=status.HTTP_200_OK,
+        )
+
+    # ------------------------------------------------------------------
+    # POST /{id}/mark_received/
+    # ------------------------------------------------------------------
+    @action(detail=True, methods=["post"], url_path="mark_received")
+    def mark_received(self, request: Request, pk=None) -> Response:
+        """Le demandeur (ou admin) confirme la réception de la commande."""
+        fiche: FicheInterne = self.get_object()
+
+        if fiche.status != FicheInterneStatus.IN_EXECUTION:
+            return Response(
+                {"detail": "La fiche doit être en cours d'exécution pour marquer la réception."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if fiche.created_by != request.user and not (
+            request.user.role == Role.ADMIN or request.user.is_staff
+        ):
+            return Response(
+                {"detail": "Seul le demandeur peut confirmer la réception."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        fiche.status = FicheInterneStatus.DELIVERED
+        fiche.received_at = timezone.now()
+        fiche.save(update_fields=["status", "received_at", "updated_at"])
+
+        return Response(
+            FicheInterneSerializer(fiche, context={"request": request}).data,
+            status=status.HTTP_200_OK,
+        )
+
 
 # ---------------------------------------------------------------------------
 # FicheExterne ViewSet
@@ -270,6 +526,7 @@ class FicheExterneViewSet(viewsets.ModelViewSet):
     """
 
     permission_classes = [IsAuthenticated]
+    pagination_class = FichePageNumberPagination
 
     def get_queryset(self) -> QuerySet:
         user = self.request.user
@@ -277,13 +534,36 @@ class FicheExterneViewSet(viewsets.ModelViewSet):
             "created_by", "department"
         ).prefetch_related("items")
 
-        if user.role == Role.EMPLOYEE:
-            return qs.filter(created_by=user)
+        # Admin & Finance department members see all fiches (they handle execution)
+        in_admin_finance = user.department and user.department.code == "AF"
 
-        if user.role == Role.MANAGER:
-            subordinate_ids = user.subordinates.values_list("id", flat=True)
-            return qs.filter(
-                Q(created_by=user) | Q(created_by__in=subordinate_ids)
+        if user.role in (Role.DAF, Role.DIRECTOR, Role.ADMIN) or in_admin_finance:
+            pass  # see everything
+        elif user.role == Role.MANAGER:
+            # See all fiches from own department
+            if user.department:
+                qs = qs.filter(department=user.department)
+            else:
+                qs = qs.filter(created_by=user)
+        else:
+            qs = qs.filter(created_by=user)
+
+        # Optional filters from query params
+        created_by_id = self.request.query_params.get("created_by")
+        if created_by_id:
+            qs = qs.filter(created_by__id=created_by_id)
+
+        status_param = self.request.query_params.get("status")
+        if status_param:
+            qs = qs.filter(status=status_param)
+
+        search_param = self.request.query_params.get("search", "").strip()
+        if search_param:
+            qs = qs.filter(
+                Q(created_by__first_name__icontains=search_param) |
+                Q(created_by__last_name__icontains=search_param) |
+                Q(department__name__icontains=search_param) |
+                Q(notes__icontains=search_param)
             )
 
         return qs
@@ -298,6 +578,8 @@ class FicheExterneViewSet(viewsets.ModelViewSet):
             return [IsAuthenticated(), IsOwnerOrReadOnly()]
         if self.action == "validate":
             return [IsAuthenticated(), CanValidateFicheExterne()]
+        if self.action == "execute":
+            return [IsAuthenticated(), CanExecuteFiche()]
         return [IsAuthenticated()]
 
     def perform_create(self, serializer):
@@ -365,7 +647,7 @@ class FicheExterneViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def validate(self, request: Request, pk=None) -> Response:
-        """Approve or reject a FicheExterne."""
+        """Approve, reject, or request clarification on a FicheExterne."""
         fiche: FicheExterne = self.get_object()
 
         valid_statuses = list(EXTERNE_NEXT_STATUS.keys())
@@ -382,12 +664,30 @@ class FicheExterneViewSet(viewsets.ModelViewSet):
         commentaire = action_serializer.validated_data.get("commentaire", "")
         user = request.user
 
+        if act == "request_clarification" and fiche.status == FicheExterneStatus.PENDING_MANAGER:
+            return Response(
+                {"detail": "La demande de clarification n'est pas disponible à cette étape."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if act == "request_clarification" and not commentaire:
+            return Response(
+                {"detail": "Un commentaire est requis pour demander une clarification."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         if act == "approve":
             new_status = EXTERNE_NEXT_STATUS[fiche.status]
-            decision = ValidationStatus.APPROVED
-        else:
+            decision = (
+                ValidationStatus.FAVORABLE
+                if fiche.status == FicheExterneStatus.PENDING_MANAGER
+                else ValidationStatus.APPROVED
+            )
+        elif act == "reject":
             new_status = FicheExterneStatus.REJECTED
             decision = ValidationStatus.REJECTED
+        else:  # request_clarification
+            new_status = FicheExterneStatus.PENDING_CLARIFICATION_DIR
+            decision = ValidationStatus.CLARIFICATION_REQUESTED
 
         ct = ContentType.objects.get_for_model(FicheExterne)
         Validation.objects.create(
@@ -402,6 +702,81 @@ class FicheExterneViewSet(viewsets.ModelViewSet):
 
         fiche.status = new_status
         fiche.save(update_fields=["status", "updated_at"])
+
+        ref = f"FE-{fiche.pk:05d}"
+        if act == "approve":
+            if new_status == FicheExterneStatus.PENDING_DIRECTOR:
+                _notify(
+                    _users_by_role(Role.DIRECTOR), user,
+                    f"La fiche {ref} a reçu un avis favorable et attend votre validation.",
+                    NotificationType.FAVORABLE, FicheType.EXTERNE, fiche.pk,
+                )
+            elif new_status == FicheExterneStatus.APPROVED:
+                _notify(
+                    [fiche.created_by], user,
+                    f"Votre fiche {ref} a été approuvée et est prête pour l'exécution.",
+                    NotificationType.APPROVED, FicheType.EXTERNE, fiche.pk,
+                )
+        elif act == "reject":
+            _notify(
+                [fiche.created_by], user,
+                f"Votre fiche {ref} a été rejetée. Motif : {commentaire or '—'}",
+                NotificationType.REJECTED, FicheType.EXTERNE, fiche.pk,
+            )
+        else:
+            managers = _dept_managers(fiche.department)
+            _notify(
+                managers, user,
+                f"Une clarification est demandée pour la fiche {ref} : {commentaire}",
+                NotificationType.CLARIFICATION_REQUEST, FicheType.EXTERNE, fiche.pk,
+            )
+
+        return Response(
+            FicheExterneSerializer(fiche, context={"request": request}).data,
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="respond_clarification")
+    def respond_clarification(self, request: Request, pk=None) -> Response:
+        """Manager responds to a clarification request on a FicheExterne."""
+        fiche: FicheExterne = self.get_object()
+        user = request.user
+
+        if not (user.role == Role.MANAGER or user.role == Role.ADMIN or user.is_staff):
+            return Response(
+                {"detail": "Seul le Supérieur Hiérarchique peut répondre aux demandes de clarification."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if fiche.status != FicheExterneStatus.PENDING_CLARIFICATION_DIR:
+            return Response(
+                {"detail": "Cette fiche n'est pas en attente de clarification."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = RespondClarificationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        commentaire = serializer.validated_data["commentaire"]
+
+        ct = ContentType.objects.get_for_model(FicheExterne)
+        Validation.objects.create(
+            fiche_type=FicheType.EXTERNE,
+            content_type=ct,
+            object_id=fiche.pk,
+            validator=user,
+            role_at_validation=user.role,
+            status=ValidationStatus.CLARIFICATION_RESPONDED,
+            commentaire=commentaire,
+        )
+
+        fiche.status = FicheExterneStatus.PENDING_DIRECTOR
+        fiche.save(update_fields=["status", "updated_at"])
+
+        _notify(
+            _users_by_role(Role.DIRECTOR, Role.DAF), user,
+            f"Clarification fournie pour la fiche FE-{fiche.pk:05d}. Elle est de nouveau en attente de validation DG.",
+            NotificationType.CLARIFICATION_RESPONSE, FicheType.EXTERNE, fiche.pk,
+        )
 
         return Response(
             FicheExterneSerializer(fiche, context={"request": request}).data,
@@ -418,6 +793,104 @@ class FicheExterneViewSet(viewsets.ModelViewSet):
         ).select_related("validator")
         serializer = ValidationSerializer(qs, many=True, context={"request": request})
         return Response(serializer.data)
+
+    @action(detail=True, methods=["post"])
+    def execute(self, request: Request, pk=None) -> Response:
+        """Comptabilité (DAF) marque la fiche comme exécutée."""
+        fiche: FicheExterne = self.get_object()
+
+        if fiche.status != FicheExterneStatus.APPROVED:
+            return Response(
+                {"detail": "Seules les fiches approuvées peuvent être exécutées."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        fiche.status = FicheExterneStatus.IN_EXECUTION
+        fiche.executed_by = request.user
+        fiche.executed_at = timezone.now()
+        fiche.execution_fournisseur = request.data.get("execution_fournisseur", "")
+        fiche.execution_reference = request.data.get("execution_reference", "")
+        fiche.execution_montant = request.data.get("execution_montant") or None
+        fiche.execution_mode_paiement = request.data.get("execution_mode_paiement", "")
+        fiche.execution_numero_facture = request.data.get("execution_numero_facture", "")
+        fiche.execution_note = request.data.get("execution_note", "")
+        fiche.save(update_fields=[
+            "status", "executed_by", "executed_at",
+            "execution_fournisseur", "execution_reference", "execution_montant",
+            "execution_mode_paiement", "execution_numero_facture", "execution_note",
+            "updated_at",
+        ])
+
+        return Response(
+            FicheExterneSerializer(fiche, context={"request": request}).data,
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="mark_received")
+    def mark_received(self, request: Request, pk=None) -> Response:
+        """Le demandeur confirme la réception."""
+        fiche: FicheExterne = self.get_object()
+
+        if fiche.status != FicheExterneStatus.IN_EXECUTION:
+            return Response(
+                {"detail": "La fiche doit être en cours d'exécution pour marquer la réception."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if fiche.created_by != request.user and not (
+            request.user.role == Role.ADMIN or request.user.is_staff
+        ):
+            return Response(
+                {"detail": "Seul le demandeur peut confirmer la réception."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        fiche.status = FicheExterneStatus.DELIVERED
+        fiche.received_at = timezone.now()
+        fiche.save(update_fields=["status", "received_at", "updated_at"])
+
+        return Response(
+            FicheExterneSerializer(fiche, context={"request": request}).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Notifications
+# ---------------------------------------------------------------------------
+
+class NotificationViewSet(viewsets.ViewSet):
+    """
+    GET  /api/notifications/              → list last 50 notifications (+ unread count)
+    POST /api/notifications/mark_all_read/ → mark all as read
+    POST /api/notifications/{id}/mark_read/ → mark one as read
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request: Request) -> Response:
+        qs = Notification.objects.filter(
+            recipient=request.user
+        ).select_related("sender").order_by("-created_at")[:50]
+        unread_count = Notification.objects.filter(
+            recipient=request.user, is_read=False
+        ).count()
+        serializer = NotificationSerializer(qs, many=True)
+        return Response({"results": serializer.data, "unread_count": unread_count})
+
+    @action(detail=False, methods=["post"], url_path="mark_all_read")
+    def mark_all_read(self, request: Request) -> Response:
+        Notification.objects.filter(
+            recipient=request.user, is_read=False
+        ).update(is_read=True)
+        return Response({"detail": "Toutes les notifications ont été marquées comme lues."})
+
+    @action(detail=True, methods=["post"], url_path="mark_read")
+    def mark_read(self, request: Request, pk=None) -> Response:
+        notif = get_object_or_404(Notification, pk=pk, recipient=request.user)
+        notif.is_read = True
+        notif.save(update_fields=["is_read"])
+        return Response({"detail": "Notification marquée comme lue."})
 
 
 # ---------------------------------------------------------------------------
@@ -447,13 +920,12 @@ class DashboardView(APIView):
             fi_qs = FicheInterne.objects.filter(created_by=user)
             fe_qs = FicheExterne.objects.filter(created_by=user)
         elif user.role == Role.MANAGER:
-            sub_ids = user.subordinates.values_list("id", flat=True)
-            fi_qs = FicheInterne.objects.filter(
-                Q(created_by=user) | Q(created_by__in=sub_ids)
-            )
-            fe_qs = FicheExterne.objects.filter(
-                Q(created_by=user) | Q(created_by__in=sub_ids)
-            )
+            if user.department:
+                fi_qs = FicheInterne.objects.filter(department=user.department)
+                fe_qs = FicheExterne.objects.filter(department=user.department)
+            else:
+                fi_qs = FicheInterne.objects.filter(created_by=user)
+                fe_qs = FicheExterne.objects.filter(created_by=user)
         else:
             fi_qs = FicheInterne.objects.all()
             fe_qs = FicheExterne.objects.all()
@@ -494,6 +966,71 @@ class DashboardView(APIView):
             if pending_externe_status else 0
         )
 
+        # ------------------------------------------------------------------
+        # Recent fiches (last 8, combined interne + externe)
+        # ------------------------------------------------------------------
+        def extract_recent(qs, fiche_type):
+            rows = list(
+                qs.select_related("created_by", "department")
+                .order_by("-created_at")[:8]
+                .values(
+                    "id", "status", "created_at",
+                    "created_by__first_name", "created_by__last_name",
+                    "department__name",
+                )
+            )
+            for r in rows:
+                fn = r.pop("created_by__first_name") or ""
+                ln = r.pop("created_by__last_name") or ""
+                r["created_by_name"] = f"{fn} {ln}".strip() or "—"
+                r["department_name"] = r.pop("department__name") or "—"
+                r["type"] = fiche_type
+                r["created_at"] = r["created_at"].isoformat() if r["created_at"] else None
+            return rows
+
+        recent_internes = extract_recent(fi_qs, "interne")
+        recent_externes = extract_recent(fe_qs, "externe")
+        recent_fiches = sorted(
+            recent_internes + recent_externes,
+            key=lambda x: x["created_at"] or "",
+            reverse=True,
+        )[:8]
+
+        # ------------------------------------------------------------------
+        # Monthly stats — last 6 months
+        # ------------------------------------------------------------------
+        today = date.today()
+        months = []
+        for i in range(5, -1, -1):
+            m = today.month - i
+            y = today.year
+            while m <= 0:
+                m += 12
+                y -= 1
+            months.append(f"{y:04d}-{m:02d}")
+
+        def monthly_counts(qs):
+            return {
+                row["month"].strftime("%Y-%m"): row["count"]
+                for row in (
+                    qs.annotate(month=TruncMonth("created_at"))
+                    .values("month")
+                    .annotate(count=Count("id"))
+                    .filter(month__isnull=False)
+                    .order_by("month")
+                )
+            }
+
+        mi = monthly_counts(fi_qs)
+        me = monthly_counts(fe_qs)
+        monthly_stats = [
+            {"month": m, "internes": mi.get(m, 0), "externes": me.get(m, 0)}
+            for m in months
+        ]
+
+        total_internes = fi_qs.count()
+        total_externes = fe_qs.count()
+
         return Response(
             {
                 "counts_interne": counts_interne,
@@ -504,9 +1041,11 @@ class DashboardView(APIView):
                     "total": pending_interne_count + pending_externe_count,
                 },
                 "total_fiches": {
-                    "internes": fi_qs.count(),
-                    "externes": fe_qs.count(),
-                    "combined": fi_qs.count() + fe_qs.count(),
+                    "internes": total_internes,
+                    "externes": total_externes,
+                    "combined": total_internes + total_externes,
                 },
+                "recent_fiches": recent_fiches,
+                "monthly_stats": monthly_stats,
             }
         )

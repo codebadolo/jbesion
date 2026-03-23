@@ -22,6 +22,7 @@ from .serializers import (
     UserSerializer,
     UserCreateSerializer,
     UserUpdateSerializer,
+    AdminUserUpdateSerializer,
     ChangePasswordSerializer,
     LoginSerializer,
 )
@@ -170,7 +171,7 @@ class UserViewSet(viewsets.ModelViewSet):
         if self.action == "create":
             return UserCreateSerializer
         if self.action in ("update", "partial_update"):
-            return UserUpdateSerializer
+            return AdminUserUpdateSerializer
         return UserSerializer
 
     def get_permissions(self):
