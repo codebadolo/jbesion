@@ -1,7 +1,7 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
-import { createFiche, selectFichesLoading, selectFichesError, clearFichesError } from '../../store/fichesSlice.js'
+import { clearFichesError, createFiche, selectFichesError, selectFichesLoading } from '../../store/fichesSlice.js'
 import ItemsTable from './ItemsTable.jsx'
 
 /**
@@ -133,7 +133,7 @@ export default function FicheExterneForm({ onSuccess }) {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}{' '}
-                <span className="text-sm font-normal text-gray-500">MAD</span>
+                <span className="text-sm font-normal text-gray-500">FCFA</span>
               </p>
             </div>
             <div className="bg-white rounded-lg border border-gray-200 p-3">
@@ -143,7 +143,7 @@ export default function FicheExterneForm({ onSuccess }) {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}{' '}
-                <span className="text-sm font-normal text-gray-500">MAD</span>
+                <span className="text-sm font-normal text-gray-500">FCFA</span>
               </p>
             </div>
           </div>

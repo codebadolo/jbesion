@@ -2,6 +2,7 @@ import React from 'react'
 import { NavLink } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { selectUser } from '../../store/authSlice.js'
+import { selectUnreadCount } from '../../store/notificationsSlice.js'
 
 const navItems = [
   {
@@ -34,6 +35,27 @@ const navItems = [
       </svg>
     ),
   },
+  {
+    label: 'Bons de Paiement',
+    to: '/bons-paiement',
+    icon: (
+      <svg className="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round"
+          d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm3 0h.008v.008H18V10.5Zm-12 0h.008v.008H6V10.5Z" />
+      </svg>
+    ),
+  },
+  {
+    label: 'Notifications',
+    to: '/notifications',
+    notifBadge: true,   // signal pour passer le unreadCount
+    icon: (
+      <svg className="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round"
+          d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
+      </svg>
+    ),
+  },
 ]
 
 const adminItems = [
@@ -59,7 +81,7 @@ const adminItems = [
   },
 ]
 
-function NavItem({ item, collapsed, onClick }) {
+function NavItem({ item, collapsed, onClick, badge }) {
   return (
     <NavLink
       to={item.to}
@@ -76,17 +98,32 @@ function NavItem({ item, collapsed, onClick }) {
       }
       style={({ isActive }) => isActive ? { backgroundColor: '#37B6E9' } : {}}
     >
-      <span className="flex-shrink-0">{item.icon}</span>
+      <span className="flex-shrink-0 relative">
+        {item.icon}
+        {/* Badge count for items like Notifications */}
+        {badge > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white text-[9px] font-bold ring-2 ring-[#162C54]">
+            {badge > 9 ? '9+' : badge}
+          </span>
+        )}
+      </span>
 
       {/* Label — hidden when collapsed */}
       {!collapsed && (
-        <span className="text-sm font-medium truncate">{item.label}</span>
+        <span className="flex-1 text-sm font-medium truncate">{item.label}</span>
+      )}
+
+      {/* Badge beside label (non-collapsed) */}
+      {!collapsed && badge > 0 && (
+        <span className="flex-shrink-0 ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
+          {badge > 99 ? '99+' : badge}
+        </span>
       )}
 
       {/* Tooltip when collapsed */}
       {collapsed && (
         <span className="pointer-events-none absolute left-full ml-3 z-50 whitespace-nowrap rounded-md bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-          {item.label}
+          {item.label}{badge > 0 ? ` (${badge})` : ''}
         </span>
       )}
     </NavLink>
@@ -95,6 +132,7 @@ function NavItem({ item, collapsed, onClick }) {
 
 export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
   const user = useSelector(selectUser)
+  const unreadCount = useSelector(selectUnreadCount)
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'DIRECTOR'
 
   const sidebarContent = (
@@ -154,7 +192,7 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) 
         {collapsed && <div className="mb-2" />}
 
         {navItems.map((item) => (
-          <NavItem key={item.to} item={item} collapsed={collapsed} onClick={onClose} />
+          <NavItem key={item.to} item={item} collapsed={collapsed} onClick={onClose} badge={item.notifBadge ? unreadCount : 0} />
         ))}
 
         {isAdmin && (
@@ -233,7 +271,7 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) 
                   Navigation
                 </p>
                 {navItems.map((item) => (
-                  <NavItem key={item.to} item={item} collapsed={false} onClick={onClose} />
+                  <NavItem key={item.to} item={item} collapsed={false} onClick={onClose} badge={item.notifBadge ? unreadCount : 0} />
                 ))}
                 {isAdmin && (
                   <>

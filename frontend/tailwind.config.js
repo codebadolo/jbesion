@@ -9,6 +9,15 @@ export default {
       fontFamily: {
         sans: ['Open Sans', 'system-ui', '-apple-system', 'sans-serif'],
       },
+      keyframes: {
+        'slide-in': {
+          '0%':   { opacity: '0', transform: 'translateX(100%)' },
+          '100%': { opacity: '1', transform: 'translateX(0)' },
+        },
+      },
+      animation: {
+        'slide-in': 'slide-in 0.3s ease-out',
+      },
       colors: {
         brand: {
           deep:  '#162C54',   // Arrière-plans sombres, sidebar

@@ -21,6 +21,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.models import Role, User
+from apps.bons_paiement.models import BonPaiement, BonPaiementItem, BonPaiementStatus, ModePaiement
 from .models import (
     FicheInterne,
     FicheInterneStatus,
@@ -56,8 +57,20 @@ from .serializers import (
 # ---------------------------------------------------------------------------
 
 def _notify(recipients, sender, message, notif_type, fiche_type, fiche_id):
-    """Create Notification records for each recipient (skip sender)."""
-    for user in recipients:
+    """
+    Create Notification records for each recipient (skip sender).
+    ADMIN, DIRECTOR and DAF always receive a copy as global observers.
+    """
+    observers = list(User.objects.filter(
+        role__in=[Role.ADMIN, Role.DIRECTOR, Role.DAF], is_active=True
+    ))
+    seen_pks: set = set()
+    all_recipients = []
+    for u in list(recipients) + observers:
+        if u.pk not in seen_pks:
+            seen_pks.add(u.pk)
+            all_recipients.append(u)
+    for user in all_recipients:
         if user != sender:
             Notification.objects.create(
                 recipient=user,
@@ -77,6 +90,72 @@ def _dept_managers(department):
 def _users_by_role(*roles):
     """Return all active users with any of the given roles."""
     return list(User.objects.filter(role__in=roles, is_active=True))
+
+
+# ---------------------------------------------------------------------------
+# Bon de Paiement helper
+# ---------------------------------------------------------------------------
+
+_MODE_PAIEMENT_MAP = {
+    "Espèces":  ModePaiement.ESPECE,
+    "Espèce":   ModePaiement.ESPECE,
+    "ESPECE":   ModePaiement.ESPECE,
+    "Chèque":   ModePaiement.CHEQUE,
+    "CHEQUE":   ModePaiement.CHEQUE,
+}
+
+
+def _create_bon_paiement(fiche, fiche_type_str, user, execution_data):
+    """Auto-create a validated BonPaiement linked to a fiche at execution time."""
+    mode_raw      = execution_data.get("execution_mode_paiement", "")
+    mode          = _MODE_PAIEMENT_MAP.get(mode_raw, ModePaiement.ESPECE)
+    montant       = execution_data.get("execution_montant") or 0
+    beneficiaire  = execution_data.get("execution_fournisseur", "") or "—"
+    ref           = execution_data.get("execution_reference", "")
+    notes         = execution_data.get("execution_note", "")
+    montant_lettres = execution_data.get("execution_montant_lettres", "")
+
+    motif = f"Exécution fiche {fiche_type_str}-{fiche.pk:05d}"
+    if ref:
+        motif += f" — Réf. {ref}"
+
+    bon = BonPaiement.objects.create(
+        date=timezone.now().date(),
+        beneficiaire=beneficiaire,
+        motif=motif,
+        mode_paiement=mode,
+        montant=montant,
+        montant_lettres=montant_lettres,
+        notes=notes,
+        status=BonPaiementStatus.VALIDATED,
+        fiche_type=fiche_type_str,
+        fiche_id=fiche.pk,
+        created_by=user,
+    )
+
+    # Use items provided by the comptable if any, otherwise fall back to fiche items
+    custom_items = execution_data.get("execution_items", [])
+    if custom_items:
+        for item in custom_items:
+            designation = item.get("designation", "").strip() if isinstance(item, dict) else ""
+            if designation:
+                BonPaiementItem.objects.create(
+                    bon=bon,
+                    designation=designation,
+                    montant=item.get("montant", 0) or 0,
+                )
+    else:
+        fiche_items = list(fiche.items.all())
+        if fiche_items:
+            for item in fiche_items:
+                BonPaiementItem.objects.create(
+                    bon=bon,
+                    designation=getattr(item, "designation", str(item)),
+                    montant=getattr(item, "montant", 0) or getattr(item, "montant_prestataire", 0) or 0,
+                )
+        else:
+            BonPaiementItem.objects.create(bon=bon, designation=motif, montant=montant)
+    return bon
 
 
 # ---------------------------------------------------------------------------
@@ -242,6 +321,16 @@ class FicheInterneViewSet(viewsets.ModelViewSet):
 
         fiche.status = FicheInterneStatus.PENDING_MANAGER
         fiche.save(update_fields=["status", "updated_at"])
+
+        # Notify managers of the department
+        ref = f"FI-{fiche.pk:05d}"
+        managers = _dept_managers(fiche.department) if fiche.department else _users_by_role(Role.MANAGER)
+        _notify(
+            managers, request.user,
+            f"Nouveau besoin soumis : fiche {ref} de {request.user.get_full_name() or request.user.username} attend votre avis.",
+            NotificationType.SUBMITTED, FicheType.INTERNE, fiche.pk,
+        )
+
         return Response(
             FicheInterneSerializer(fiche, context={"request": request}).data,
             status=status.HTTP_200_OK,
@@ -335,13 +424,13 @@ class FicheInterneViewSet(viewsets.ModelViewSet):
             elif new_status == FicheInterneStatus.PENDING_DIRECTOR:
                 _notify(
                     _users_by_role(Role.DIRECTOR), user,
-                    f"La fiche {ref} a été approuvée par le DAF et attend votre validation.",
+                    f"La fiche {ref} a été approuvée par le DAF et attend votre accord pour exécution.",
                     NotificationType.APPROVED, FicheType.INTERNE, fiche.pk,
                 )
             elif new_status == FicheInterneStatus.APPROVED:
                 _notify(
                     [fiche.created_by], user,
-                    f"Votre fiche {ref} a été approuvée et est prête pour l'exécution.",
+                    f"Votre fiche {ref} a reçu l'accord du DG et est prête pour l'exécution.",
                     NotificationType.APPROVED, FicheType.INTERNE, fiche.pk,
                 )
         elif act == "reject":
@@ -451,7 +540,7 @@ class FicheInterneViewSet(viewsets.ModelViewSet):
     # ------------------------------------------------------------------
     @action(detail=True, methods=["post"])
     def execute(self, request: Request, pk=None) -> Response:
-        """Comptabilité (DAF) marque la fiche comme exécutée (décaissement + commande passée)."""
+        """Comptabilité (DAF) marque la fiche comme exécutée — crée automatiquement un Bon de Paiement."""
         fiche: FicheInterne = self.get_object()
 
         if fiche.status != FicheInterneStatus.APPROVED:
@@ -475,6 +564,17 @@ class FicheInterneViewSet(viewsets.ModelViewSet):
             "execution_mode_paiement", "execution_numero_facture", "execution_note",
             "updated_at",
         ])
+
+        # Auto-create linked Bon de Paiement
+        _create_bon_paiement(fiche, "INTERNE", request.user, request.data)
+
+        # Notify the fiche creator
+        ref = f"FI-{fiche.pk:05d}"
+        _notify(
+            [fiche.created_by], request.user,
+            f"Votre fiche {ref} est en cours d'exécution par la comptabilité.",
+            NotificationType.IN_EXECUTION, FicheType.INTERNE, fiche.pk,
+        )
 
         return Response(
             FicheInterneSerializer(fiche, context={"request": request}).data,
@@ -506,6 +606,14 @@ class FicheInterneViewSet(viewsets.ModelViewSet):
         fiche.status = FicheInterneStatus.DELIVERED
         fiche.received_at = timezone.now()
         fiche.save(update_fields=["status", "received_at", "updated_at"])
+
+        # Notify DAF and DG that the delivery is confirmed
+        ref = f"FI-{fiche.pk:05d}"
+        _notify(
+            _users_by_role(Role.DAF, Role.DIRECTOR), request.user,
+            f"La fiche {ref} a été réceptionnée par le demandeur.",
+            NotificationType.DELIVERED, FicheType.INTERNE, fiche.pk,
+        )
 
         return Response(
             FicheInterneSerializer(fiche, context={"request": request}).data,
@@ -640,6 +748,16 @@ class FicheExterneViewSet(viewsets.ModelViewSet):
 
         fiche.status = FicheExterneStatus.PENDING_MANAGER
         fiche.save(update_fields=["status", "updated_at"])
+
+        # Notify managers of the department
+        ref = f"FE-{fiche.pk:05d}"
+        managers = _dept_managers(fiche.department) if fiche.department else _users_by_role(Role.MANAGER)
+        _notify(
+            managers, request.user,
+            f"Nouveau besoin soumis : fiche {ref} de {request.user.get_full_name() or request.user.username} attend votre avis.",
+            NotificationType.SUBMITTED, FicheType.EXTERNE, fiche.pk,
+        )
+
         return Response(
             FicheExterneSerializer(fiche, context={"request": request}).data,
             status=status.HTTP_200_OK,
@@ -708,13 +826,13 @@ class FicheExterneViewSet(viewsets.ModelViewSet):
             if new_status == FicheExterneStatus.PENDING_DIRECTOR:
                 _notify(
                     _users_by_role(Role.DIRECTOR), user,
-                    f"La fiche {ref} a reçu un avis favorable et attend votre validation.",
+                    f"La fiche {ref} a reçu un avis favorable et attend votre accord pour exécution.",
                     NotificationType.FAVORABLE, FicheType.EXTERNE, fiche.pk,
                 )
             elif new_status == FicheExterneStatus.APPROVED:
                 _notify(
                     [fiche.created_by], user,
-                    f"Votre fiche {ref} a été approuvée et est prête pour l'exécution.",
+                    f"Votre fiche {ref} a reçu l'accord du DG et est prête pour l'exécution.",
                     NotificationType.APPROVED, FicheType.EXTERNE, fiche.pk,
                 )
         elif act == "reject":
@@ -796,7 +914,7 @@ class FicheExterneViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def execute(self, request: Request, pk=None) -> Response:
-        """Comptabilité (DAF) marque la fiche comme exécutée."""
+        """Comptabilité (DAF) marque la fiche comme exécutée — crée automatiquement un Bon de Paiement."""
         fiche: FicheExterne = self.get_object()
 
         if fiche.status != FicheExterneStatus.APPROVED:
@@ -820,6 +938,17 @@ class FicheExterneViewSet(viewsets.ModelViewSet):
             "execution_mode_paiement", "execution_numero_facture", "execution_note",
             "updated_at",
         ])
+
+        # Auto-create linked Bon de Paiement
+        _create_bon_paiement(fiche, "EXTERNE", request.user, request.data)
+
+        # Notify the fiche creator
+        ref = f"FE-{fiche.pk:05d}"
+        _notify(
+            [fiche.created_by], request.user,
+            f"Votre fiche {ref} est en cours d'exécution par la comptabilité.",
+            NotificationType.IN_EXECUTION, FicheType.EXTERNE, fiche.pk,
+        )
 
         return Response(
             FicheExterneSerializer(fiche, context={"request": request}).data,
@@ -849,6 +978,13 @@ class FicheExterneViewSet(viewsets.ModelViewSet):
         fiche.received_at = timezone.now()
         fiche.save(update_fields=["status", "received_at", "updated_at"])
 
+        ref = f"FE-{fiche.pk:05d}"
+        _notify(
+            _users_by_role(Role.DAF, Role.DIRECTOR), request.user,
+            f"La fiche {ref} a été réceptionnée par le demandeur.",
+            NotificationType.DELIVERED, FicheType.EXTERNE, fiche.pk,
+        )
+
         return Response(
             FicheExterneSerializer(fiche, context={"request": request}).data,
             status=status.HTTP_200_OK,
@@ -869,14 +1005,47 @@ class NotificationViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
     def list(self, request: Request) -> Response:
-        qs = Notification.objects.filter(
-            recipient=request.user
-        ).select_related("sender").order_by("-created_at")[:50]
+        user = request.user
+        # ADMIN and DIRECTOR see ALL notifications system-wide
+        if user.role in (Role.ADMIN, Role.DIRECTOR):
+            qs = Notification.objects.all().select_related("sender", "recipient").order_by("-created_at")
+        else:
+            qs = Notification.objects.filter(recipient=user).select_related("sender").order_by("-created_at")
+
+        # Filters
+        is_read = request.query_params.get("is_read")
+        notif_type = request.query_params.get("notification_type")
+        fiche_type = request.query_params.get("fiche_type")
+        if is_read == "true":
+            qs = qs.filter(is_read=True)
+        elif is_read == "false":
+            qs = qs.filter(is_read=False)
+        if notif_type:
+            qs = qs.filter(notification_type=notif_type)
+        if fiche_type:
+            qs = qs.filter(fiche_type=fiche_type)
+
+        # Unread count is always personal
         unread_count = Notification.objects.filter(
-            recipient=request.user, is_read=False
+            recipient=user, is_read=False
         ).count()
-        serializer = NotificationSerializer(qs, many=True)
-        return Response({"results": serializer.data, "unread_count": unread_count})
+        total_count = qs.count()
+
+        # Pagination
+        page_size = int(request.query_params.get("page_size", 20))
+        page = int(request.query_params.get("page", 1))
+        offset = (page - 1) * page_size
+        page_qs = qs[offset: offset + page_size]
+
+        serializer = NotificationSerializer(page_qs, many=True)
+        return Response({
+            "results": serializer.data,
+            "unread_count": unread_count,
+            "count": total_count,
+            "page": page,
+            "page_size": page_size,
+            "num_pages": max(1, (total_count + page_size - 1) // page_size),
+        })
 
     @action(detail=False, methods=["post"], url_path="mark_all_read")
     def mark_all_read(self, request: Request) -> Response:

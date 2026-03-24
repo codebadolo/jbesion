@@ -344,11 +344,17 @@ class Validation(models.Model):
 # ---------------------------------------------------------------------------
 
 class NotificationType(models.TextChoices):
+    SUBMITTED              = "SUBMITTED",               "Besoin soumis"
     FAVORABLE              = "FAVORABLE",               "Avis favorable"
-    APPROVED               = "APPROVED",                "Approuvé"
+    APPROVED               = "APPROVED",                "Accord pour exécution"
     REJECTED               = "REJECTED",                "Rejeté"
     CLARIFICATION_REQUEST  = "CLARIFICATION_REQUEST",   "Demande de clarification"
     CLARIFICATION_RESPONSE = "CLARIFICATION_RESPONSE",  "Clarification fournie"
+    IN_EXECUTION           = "IN_EXECUTION",            "En cours d'exécution"
+    DELIVERED              = "DELIVERED",               "Livré / Réceptionné"
+    BON_EMIS               = "BON_EMIS",                "Bon de paiement émis"
+    BON_VALIDE             = "BON_VALIDE",              "Bon de paiement validé"
+    BON_ANNULE             = "BON_ANNULE",              "Bon de paiement annulé"
 
 
 class Notification(models.Model):

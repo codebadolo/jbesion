@@ -1,7 +1,7 @@
 import axiosInstance from './axios.js'
 
-export const getNotifications = () =>
-  axiosInstance.get('/notifications/').then((r) => r.data)
+export const getNotifications = (params) =>
+  axiosInstance.get('/notifications/', { params }).then((r) => r.data)
 
 export const markNotificationRead = (id) =>
   axiosInstance.post(`/notifications/${id}/mark_read/`).then((r) => r.data)

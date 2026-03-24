@@ -18,6 +18,10 @@ import UserDetail from './pages/Admin/UserDetail.jsx'
 import DepartmentsList from './pages/Admin/DepartmentsList.jsx'
 import NotFound from './pages/NotFound/NotFound.jsx'
 import Profile from './pages/Profile/Profile.jsx'
+import NotificationsPage from './pages/Notifications/NotificationsPage.jsx'
+import BonsPaiementList from './pages/BonsPaiement/BonsPaiementList.jsx'
+import BonPaiementCreate from './pages/BonsPaiement/BonPaiementCreate.jsx'
+import BonPaiementDetail from './pages/BonsPaiement/BonPaiementDetail.jsx'
 
 export default function App() {
   const dispatch = useDispatch()
@@ -56,6 +60,11 @@ export default function App() {
           <Route path="admin/utilisateurs/:id" element={<UserDetail />} />
           <Route path="admin/departements" element={<DepartmentsList />} />
           <Route path="profil" element={<Profile />} />
+          <Route path="notifications" element={<NotificationsPage />} />
+          <Route path="bons-paiement" element={<BonsPaiementList />} />
+          <Route path="bons-paiement/create" element={<BonPaiementCreate />} />
+          <Route path="bons-paiement/:id" element={<BonPaiementDetail />} />
+          <Route path="bons-paiement/:id/edit" element={<BonPaiementCreate />} />
         </Route>
 
         {/* 404 */}

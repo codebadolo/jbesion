@@ -13,11 +13,31 @@ import { getFullName, formatDate } from '../../utils/helpers.js'
 import { ROLE_LABELS } from '../../utils/constants.js'
 
 const NOTIF_TYPE_ICONS = {
-  FAVORABLE: { color: 'text-emerald-600', bg: 'bg-emerald-100' },
-  APPROVED: { color: 'text-green-600', bg: 'bg-green-100' },
-  REJECTED: { color: 'text-red-600', bg: 'bg-red-100' },
-  CLARIFICATION_REQUEST: { color: 'text-amber-600', bg: 'bg-amber-100' },
-  CLARIFICATION_RESPONSE: { color: 'text-sky-600', bg: 'bg-sky-100' },
+  SUBMITTED:              { color: 'text-blue-600',    bg: 'bg-blue-100'    },
+  FAVORABLE:              { color: 'text-emerald-600', bg: 'bg-emerald-100' },
+  APPROVED:               { color: 'text-green-600',  bg: 'bg-green-100'   },
+  REJECTED:               { color: 'text-red-600',    bg: 'bg-red-100'     },
+  CLARIFICATION_REQUEST:  { color: 'text-amber-600',  bg: 'bg-amber-100'   },
+  CLARIFICATION_RESPONSE: { color: 'text-sky-600',    bg: 'bg-sky-100'     },
+  IN_EXECUTION:           { color: 'text-purple-600', bg: 'bg-purple-100'  },
+  DELIVERED:              { color: 'text-teal-600',   bg: 'bg-teal-100'    },
+  BON_EMIS:               { color: 'text-violet-600', bg: 'bg-violet-100'  },
+  BON_VALIDE:             { color: 'text-green-600',  bg: 'bg-green-100'   },
+  BON_ANNULE:             { color: 'text-red-600',    bg: 'bg-red-100'     },
+}
+
+const NOTIF_TYPE_SYMBOL = {
+  SUBMITTED:              '📋',
+  FAVORABLE:              '✓',
+  APPROVED:               '✓',
+  REJECTED:               '✕',
+  CLARIFICATION_REQUEST:  '?',
+  CLARIFICATION_RESPONSE: '↩',
+  IN_EXECUTION:           '▶',
+  DELIVERED:              '✓',
+  BON_EMIS:               '₣',
+  BON_VALIDE:             '✓',
+  BON_ANNULE:             '✕',
 }
 
 export default function Navbar({ onMenuClick, collapsed, onToggleCollapse }) {
@@ -184,9 +204,7 @@ export default function Navbar({ onMenuClick, collapsed, onToggleCollapse }) {
                         >
                           <div className={`flex-shrink-0 mt-0.5 h-7 w-7 rounded-full flex items-center justify-center ${style.bg}`}>
                             <span className={`text-xs font-bold ${style.color}`}>
-                              {n.notification_type === 'CLARIFICATION_REQUEST' ? '?' :
-                               n.notification_type === 'CLARIFICATION_RESPONSE' ? '↩' :
-                               n.notification_type === 'REJECTED' ? '✕' : '✓'}
+                              {NOTIF_TYPE_SYMBOL[n.notification_type] || '✓'}
                             </span>
                           </div>
                           <div className="flex-1 min-w-0">

@@ -14,6 +14,7 @@ from rest_framework import serializers
 
 from apps.accounts.serializers import UserSerializer
 from apps.departments.serializers import DepartmentShortSerializer
+from apps.bons_paiement.models import BonPaiement
 from .models import (
     FicheInterne,
     FicheInterneItem,
@@ -68,6 +69,16 @@ class FicheInterneSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     executed_by_detail = UserSerializer(source="executed_by", read_only=True)
     validation_history = serializers.SerializerMethodField()
+    bon_paiement_id = serializers.SerializerMethodField()
+    bon_paiement_numero = serializers.SerializerMethodField()
+
+    def get_bon_paiement_id(self, obj):
+        bp = BonPaiement.objects.filter(fiche_type="INTERNE", fiche_id=obj.pk).first()
+        return bp.pk if bp else None
+
+    def get_bon_paiement_numero(self, obj):
+        bp = BonPaiement.objects.filter(fiche_type="INTERNE", fiche_id=obj.pk).first()
+        return bp.numero if bp else None
 
     def get_validation_history(self, obj):
         ct = ContentType.objects.get_for_model(FicheInterne)
@@ -102,6 +113,8 @@ class FicheInterneSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "validation_history",
+            "bon_paiement_id",
+            "bon_paiement_numero",
         ]
         read_only_fields = [
             "id",
@@ -185,6 +198,16 @@ class FicheExterneSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     executed_by_detail = UserSerializer(source="executed_by", read_only=True)
     validation_history = serializers.SerializerMethodField()
+    bon_paiement_id = serializers.SerializerMethodField()
+    bon_paiement_numero = serializers.SerializerMethodField()
+
+    def get_bon_paiement_id(self, obj):
+        bp = BonPaiement.objects.filter(fiche_type="EXTERNE", fiche_id=obj.pk).first()
+        return bp.pk if bp else None
+
+    def get_bon_paiement_numero(self, obj):
+        bp = BonPaiement.objects.filter(fiche_type="EXTERNE", fiche_id=obj.pk).first()
+        return bp.numero if bp else None
 
     def get_validation_history(self, obj):
         ct = ContentType.objects.get_for_model(FicheExterne)
@@ -219,6 +242,8 @@ class FicheExterneSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "validation_history",
+            "bon_paiement_id",
+            "bon_paiement_numero",
         ]
         read_only_fields = [
             "id",

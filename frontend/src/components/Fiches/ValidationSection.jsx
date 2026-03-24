@@ -109,9 +109,11 @@ export default function ValidationSection({
     (ficheStatus === 'PENDING_DAF' && userRole === 'DAF') ||
     (ficheStatus === 'PENDING_DIRECTOR' && (userRole === 'DIRECTOR' || userRole === 'DAF'))
 
-  // Manager's approve button label
+  // Approve button label per stage
   const approveLabel =
-    ficheStatus === 'PENDING_MANAGER' ? 'Marquer Favorable' : 'Approuver'
+    ficheStatus === 'PENDING_MANAGER'  ? 'Marquer Favorable' :
+    ficheStatus === 'PENDING_DIRECTOR' ? 'Donner accord pour exécution' :
+    'Approuver'
 
   const handleValidate = async (e) => {
     e.preventDefault()
@@ -189,7 +191,9 @@ export default function ValidationSection({
         ) : (
           <ol className="relative border-l-2 border-gray-200 ml-3 space-y-4">
             {validations.map((v, idx) => {
-              const cfg = VALIDATION_STATUS_CONFIG[v.status] || {
+              const cfg = (v.status === 'APPROVED' && v.role_at_validation === 'DIRECTOR')
+                ? { label: 'Accord pour exécution', dot: 'bg-green-500', badge: 'bg-green-100 text-green-700', icon: 'check' }
+                : VALIDATION_STATUS_CONFIG[v.status] || {
                 label: v.status_display || v.status,
                 dot: 'bg-gray-400',
                 badge: 'bg-gray-100 text-gray-600',
