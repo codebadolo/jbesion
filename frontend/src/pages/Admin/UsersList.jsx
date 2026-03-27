@@ -48,6 +48,9 @@ const EMPTY_FORM = {
   manager: '',
   password: '',
   password_confirm: '',
+  is_agent_liaison: false,
+  is_comptable: false,
+  is_rh: false,
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -217,6 +220,9 @@ export default function UsersList() {
       manager: user.manager?.id?.toString() || user.manager?.toString() || '',
       password: '',
       password_confirm: '',
+      is_agent_liaison: user.is_agent_liaison || false,
+      is_comptable: user.is_comptable || false,
+      is_rh: user.is_rh || false,
     })
     setFormErrors({})
     setModalOpen(true)
@@ -232,8 +238,8 @@ export default function UsersList() {
   // ── Form handling ─────────────────────────────────────────────────────────
 
   const handleChange = (e) => {
-    const { name, value } = e.target
-    setForm((prev) => ({ ...prev, [name]: value }))
+    const { name, value, type, checked } = e.target
+    setForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
     if (formErrors[name]) {
       setFormErrors((prev) => ({ ...prev, [name]: undefined }))
     }
@@ -277,6 +283,9 @@ export default function UsersList() {
         role: form.role,
         department: form.department || null,
         manager: form.manager || null,
+        is_agent_liaison: form.is_agent_liaison,
+        is_comptable: form.is_comptable,
+        is_rh: form.is_rh,
       }
       if (!editingUser || form.password) {
         payload.password = form.password
@@ -637,6 +646,25 @@ export default function UsersList() {
                   </optgroup>
                 </select>
               </FormField>
+
+              {/* Rôles spéciaux */}
+              <div className="col-span-2">
+                <label className="form-label">Rôles spéciaux</label>
+                <div className="flex flex-wrap gap-4 mt-1">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" name="is_agent_liaison" checked={form.is_agent_liaison} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-blue-600" />
+                    <span className="text-sm text-gray-700">Agent de liaison</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" name="is_comptable" checked={form.is_comptable} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-blue-600" />
+                    <span className="text-sm text-gray-700">Comptable (upload proformas)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" name="is_rh" checked={form.is_rh} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-blue-600" />
+                    <span className="text-sm text-gray-700">Responsable RH (gestion missions)</span>
+                  </label>
+                </div>
+              </div>
 
               {/* Password section */}
               <div className="pt-1">

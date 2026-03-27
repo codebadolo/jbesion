@@ -125,10 +125,23 @@ export default function Profile() {
             <p className="text-sm font-medium text-gray-800">
               {user?.first_name} {user?.last_name}
             </p>
-            <p className="text-xs text-gray-500 mb-3">
+            <p className="text-xs text-gray-500">
               {ROLE_LABELS[user?.role] || user?.role}
               {user?.department_detail?.name ? ` — ${user.department_detail.name}` : ''}
             </p>
+            {user?.matricule && (
+              <p className="mt-1 inline-flex items-center gap-1.5 text-xs font-mono font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded">
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                </svg>
+                {user.matricule}
+              </p>
+            )}
+            {user?.is_agent_liaison && (
+              <span className="ml-2 inline-flex items-center text-xs font-medium text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded">
+                Agent de liaison
+              </span>
+            )}
             <input
               type="file"
               ref={fileInputRef}

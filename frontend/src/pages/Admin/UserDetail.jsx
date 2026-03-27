@@ -291,6 +291,30 @@ export default function UserDetail() {
             } />
             <InfoRow label="Inscrit le" value={formatDate(user.date_joined)} />
             <InfoRow label="Dernière co." value={user.last_login ? formatDate(user.last_login) : 'Jamais'} />
+            {(user.is_agent_liaison || user.is_comptable || user.is_rh) && (
+              <div className="flex items-start py-3 border-b border-gray-50 last:border-0">
+                <span className="flex-shrink-0 text-xs font-semibold text-gray-400 uppercase tracking-wide pt-0.5">
+                  Attributs
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {user.is_comptable && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
+                      Comptable
+                    </span>
+                  )}
+                  {user.is_rh && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700">
+                      RH
+                    </span>
+                  )}
+                  {user.is_agent_liaison && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-700">
+                      Agent liaison
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

@@ -209,7 +209,7 @@ class FicheInterneViewSet(viewsets.ModelViewSet):
         # Admin & Finance department members see all fiches (they handle execution)
         in_admin_finance = user.department and user.department.code == "AF"
 
-        if user.role in (Role.DAF, Role.DIRECTOR, Role.ADMIN) or in_admin_finance:
+        if user.role in (Role.DAF, Role.DIRECTOR, Role.ADMIN) or in_admin_finance or user.is_rh:
             pass  # see everything
         elif user.role == Role.MANAGER:
             # See all fiches from own department
@@ -645,7 +645,7 @@ class FicheExterneViewSet(viewsets.ModelViewSet):
         # Admin & Finance department members see all fiches (they handle execution)
         in_admin_finance = user.department and user.department.code == "AF"
 
-        if user.role in (Role.DAF, Role.DIRECTOR, Role.ADMIN) or in_admin_finance:
+        if user.role in (Role.DAF, Role.DIRECTOR, Role.ADMIN) or in_admin_finance or user.is_rh:
             pass  # see everything
         elif user.role == Role.MANAGER:
             # See all fiches from own department

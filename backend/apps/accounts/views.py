@@ -175,8 +175,8 @@ class UserViewSet(viewsets.ModelViewSet):
         return UserSerializer
 
     def get_permissions(self):
-        # Managers endpoint is accessible to all authenticated users
-        if self.action == "managers":
+        # Managers and agents_liaison endpoints are accessible to all authenticated users
+        if self.action in ("managers", "agents_liaison"):
             return [IsAuthenticated()]
         return super().get_permissions()
 
@@ -190,6 +190,15 @@ class UserViewSet(viewsets.ModelViewSet):
             role__in=[Role.MANAGER, Role.DIRECTOR, Role.DAF],
             is_active=True,
         ).order_by("last_name", "first_name")
+        serializer = UserSerializer(qs, many=True, context={"request": request})
+        return Response(serializer.data)
+
+    @action(detail=False, methods=["get"])
+    def agents_liaison(self, request: Request) -> Response:
+        """Return all active agents de liaison (used in dropdowns)."""
+        qs = User.objects.filter(is_agent_liaison=True, is_active=True).order_by(
+            "last_name", "first_name"
+        )
         serializer = UserSerializer(qs, many=True, context={"request": request})
         return Response(serializer.data)
 

@@ -10,6 +10,7 @@ Extends Django's AbstractUser to add:
 
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.utils import timezone
 
 
 class Role(models.TextChoices):
@@ -80,6 +81,42 @@ class User(AbstractUser):
         verbose_name="Avatar",
     )
 
+    # ------------------------------------------------------------------
+    # Numéro Matricule (généré automatiquement)
+    # ------------------------------------------------------------------
+    matricule = models.CharField(
+        max_length=20,
+        unique=True,
+        blank=True,
+        default="",
+        verbose_name="Numéro Matricule",
+    )
+
+    # ------------------------------------------------------------------
+    # Agent de liaison
+    # ------------------------------------------------------------------
+    is_agent_liaison = models.BooleanField(
+        default=False,
+        verbose_name="Agent de liaison",
+        help_text="Indique si cet utilisateur peut être affecté comme agent de liaison.",
+    )
+    is_comptable = models.BooleanField(
+        default=False,
+        verbose_name="Comptable",
+        help_text="Peut uploader des factures proforma et gérer les bons de commande.",
+    )
+    is_rh = models.BooleanField(
+        default=False,
+        verbose_name="Responsable RH",
+        help_text="Peut gérer les missions et suivre les fiches de besoin.",
+    )
+    fonction = models.CharField(
+        max_length=150,
+        blank=True,
+        default="",
+        verbose_name="Fonction / Poste",
+    )
+
     # Timestamps
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Dernière modification")
 
@@ -91,6 +128,14 @@ class User(AbstractUser):
     def __str__(self) -> str:
         full = self.get_full_name()
         return full if full else self.username
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Génère le matricule après la première sauvegarde (quand on a un pk)
+        if not self.matricule:
+            year = timezone.now().year
+            self.matricule = f"MAT-{year}-{self.pk:05d}"
+            User.objects.filter(pk=self.pk).update(matricule=self.matricule)
 
     # ------------------------------------------------------------------
     # Convenience helpers

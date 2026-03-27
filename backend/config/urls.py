@@ -48,6 +48,8 @@ urlpatterns = [
     path("api/dashboard/",       include("apps.fiches.urls_dashboard")),
     path("api/notifications/",   include("apps.fiches.urls_notifications")),
     path("api/bons-paiement/",   include("apps.bons_paiement.urls")),
+    path("api/bons-commande/",   include("apps.bons_commande.urls")),
+    path("api/missions/",        include("apps.missions.urls")),
 
     # ── Documentation ──────────────────────────────────────────────────────
     # Schéma brut JSON/YAML  →  /api/schema.json  ou  /api/schema.yaml

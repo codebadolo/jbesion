@@ -28,7 +28,7 @@ class ManagerShortSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ["id", "username", "first_name", "last_name", "email", "role"]
+        fields = ["id", "username", "first_name", "last_name", "email", "role", "matricule"]
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -50,7 +50,12 @@ class UserSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "full_name",
+            "matricule",
+            "fonction",
             "role",
+            "is_agent_liaison",
+            "is_comptable",
+            "is_rh",
             "department",
             "department_detail",
             "manager",
@@ -62,7 +67,7 @@ class UserSerializer(serializers.ModelSerializer):
             "date_joined",
             "last_login",
         ]
-        read_only_fields = ["id", "date_joined", "last_login"]
+        read_only_fields = ["id", "matricule", "date_joined", "last_login"]
 
     def get_full_name(self, obj: User) -> str:
         return obj.get_full_name() or obj.username
@@ -94,7 +99,11 @@ class UserCreateSerializer(serializers.ModelSerializer):
             "email",
             "first_name",
             "last_name",
+            "fonction",
             "role",
+            "is_agent_liaison",
+            "is_comptable",
+            "is_rh",
             "department",
             "manager",
             "phone",
@@ -156,7 +165,11 @@ class AdminUserUpdateSerializer(serializers.ModelSerializer):
             "last_name",
             "email",
             "phone",
+            "fonction",
             "role",
+            "is_agent_liaison",
+            "is_comptable",
+            "is_rh",
             "department",
             "manager",
             "is_active",

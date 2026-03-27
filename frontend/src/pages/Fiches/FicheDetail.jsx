@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import {
@@ -19,6 +19,14 @@ import ValidationSection from '../../components/Fiches/ValidationSection.jsx'
 import { formatDate, getFullName, formatMontant } from '../../utils/helpers.js'
 import { VALIDATION_ROLES, ROLE_LABELS } from '../../utils/constants.js'
 import { exportFichePDF } from '../../utils/exportPDF.js'
+import { getBonsCommande } from '../../api/bonsCommandeAPI.js'
+import {
+  soumettreDAF, validerProformas,
+  approuverDAF, rejeterDAF,
+  approuverDG, rejeterDG,
+  executerBC, cloturerBC,
+  selectionnerFourn, uploadProforma, deleteProforma,
+} from '../../store/bonsCommandeSlice.js'
 
 // ─── Workflow steps ───────────────────────────────────────────────────────────
 const WORKFLOW_STEPS = [
@@ -170,6 +178,496 @@ function BpItemsTable({ items, onChange }) {
 }
 
 
+// ─── BC helpers ───────────────────────────────────────────────────────────────
+const BC_STATUS = {
+  DRAFT:            { label: 'Brouillon',            color: 'bg-gray-100 text-gray-600' },
+  PENDING_PROFORMA: { label: 'En attente proformas', color: 'bg-amber-100 text-amber-800' },
+  PENDING_DAF:      { label: 'En attente DAF',       color: 'bg-yellow-100 text-yellow-800' },
+  PENDING_DG:       { label: 'En attente DG',        color: 'bg-orange-100 text-orange-800' },
+  APPROVED:         { label: 'Approuvé',             color: 'bg-green-100 text-green-800' },
+  REJECTED:         { label: 'Rejeté',               color: 'bg-red-100 text-red-800' },
+  IN_EXECUTION:     { label: 'En exécution',         color: 'bg-blue-100 text-blue-800' },
+  DONE:             { label: 'Clôturé',              color: 'bg-teal-100 text-teal-800' },
+}
+
+const BC_STEPS = [
+  { key: 'DRAFT',            label: 'Brouillon' },
+  { key: 'PENDING_PROFORMA', label: 'Proformas' },
+  { key: 'PENDING_DAF',      label: 'DAF' },
+  { key: 'PENDING_DG',       label: 'DG' },
+  { key: 'APPROVED',         label: 'Approuvé' },
+  { key: 'IN_EXECUTION',     label: 'Exécution' },
+  { key: 'DONE',             label: 'Clôturé' },
+]
+
+const bcCanDAF  = (u) => ['DAF',      'ADMIN'].includes(u?.role)
+const bcCanDG   = (u) => ['DIRECTOR', 'ADMIN'].includes(u?.role)
+const bcCanWrite= (u) => ['DAF', 'ADMIN'].includes(u?.role) || u?.department?.code === 'AF' || u?.is_comptable
+const bcCanUpload=(u) => u?.is_comptable || ['DAF', 'ADMIN'].includes(u?.role) || u?.department?.code === 'AF'
+
+function BcWorkflowMini({ status }) {
+  const idx = BC_STEPS.findIndex((s) => s.key === status)
+  if (status === 'REJECTED') return <span className="text-xs font-semibold text-red-600">Rejeté</span>
+  return (
+    <ol className="flex items-center">
+      {BC_STEPS.map((step, i) => {
+        const done = i < idx; const active = i === idx
+        return (
+          <li key={step.key} className="flex items-center">
+            <span title={step.label} className={[
+              'flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold ring-1 cursor-default',
+              done   ? 'bg-green-500 text-white ring-green-300' : '',
+              active ? 'bg-blue-600 text-white ring-blue-300'  : '',
+              !done && !active ? 'bg-gray-100 text-gray-400 ring-gray-200' : '',
+            ].join(' ')}>
+              {done ? '✓' : i + 1}
+            </span>
+            {i < BC_STEPS.length - 1 && <span className={`h-px w-3 ${done ? 'bg-green-300' : 'bg-gray-200'}`} />}
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+// ─── Interactive BonsCommandeSection ──────────────────────────────────────────
+const BC_APPROVED_STATUSES = ['APPROVED', 'IN_EXECUTION', 'DONE']
+
+function BonsCommandeSection({ ficheType, ficheId, user, onBcsLoaded }) {
+  const dispatch   = useDispatch()
+  const fileRefs   = useRef({})
+  const [bons,     setBons]     = useState([])
+  const [loading,  setLoading]  = useState(true)
+  const [expanded, setExpanded] = useState(null)
+
+  // per-bon states (keyed by bon.id)
+  const [panel,    setPanel]    = useState({}) // 'upload' | 'valider' | 'approuver-daf' | 'rejeter-daf' | 'approuver-dg' | 'rejeter-dg'
+  const [selPf,    setSelPf]    = useState({}) // selected proforma id for valider/selectionner
+  const [comment,  setComment]  = useState({}) // commentaire DAF/DG
+  const [newPf,    setNewPf]    = useState({}) // upload form fields
+  const [uploading,setUploading]= useState({})
+  const [actErr,   setActErr]   = useState({})
+
+  const reload = useCallback(() => {
+    getBonsCommande({ fiche_type: ficheType.toUpperCase(), fiche_id: ficheId, page_size: 50 })
+      .then((d) => {
+        const list = d.results ?? d
+        setBons(list)
+        onBcsLoaded?.(list)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [ficheType, ficheId, onBcsLoaded])
+
+  useEffect(() => { setLoading(true); reload() }, [reload])
+
+  const togglePanel = (bonId, name) =>
+    setPanel((p) => ({ ...p, [bonId]: p[bonId] === name ? null : name }))
+
+  const doAction = async (bonId, thunk, arg) => {
+    setActErr((p) => ({ ...p, [bonId]: null }))
+    try {
+      await dispatch(thunk(arg)).unwrap()
+      setPanel((p)   => ({ ...p, [bonId]: null }))
+      setSelPf((p)   => ({ ...p, [bonId]: '' }))
+      setComment((p) => ({ ...p, [bonId]: '' }))
+      reload()
+    } catch (e) {
+      setActErr((p) => ({ ...p, [bonId]: typeof e === 'string' ? e : JSON.stringify(e) }))
+    }
+  }
+
+  const handleUpload = async (bonId, e) => {
+    e.preventDefault()
+    const pf = newPf[bonId] || {}
+    if (!pf.fournisseur_nom) return
+    setUploading((p) => ({ ...p, [bonId]: true }))
+    const fd = new FormData()
+    fd.append('fournisseur_nom', pf.fournisseur_nom)
+    if (pf.reference) fd.append('reference', pf.reference)
+    if (pf.montant)   fd.append('montant',   pf.montant)
+    if (pf.notes)     fd.append('notes',     pf.notes)
+    const file = fileRefs.current[bonId]?.files?.[0]
+    if (file) fd.append('fichier', file)
+    try {
+      await dispatch(uploadProforma({ bonId, formData: fd })).unwrap()
+      setNewPf((p) => ({ ...p, [bonId]: { fournisseur_nom: '', reference: '', montant: '', notes: '' } }))
+      if (fileRefs.current[bonId]) fileRefs.current[bonId].value = ''
+      reload()
+    } catch (e) {
+      setActErr((p) => ({ ...p, [bonId]: typeof e === 'string' ? e : 'Erreur upload' }))
+    } finally {
+      setUploading((p) => ({ ...p, [bonId]: false }))
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="card">
+        <div className="px-6 py-4 border-b border-gray-100">
+          <h2 className="text-sm font-semibold text-gray-700">Bons de Commande</h2>
+        </div>
+        <div className="flex justify-center py-8">
+          <span className="h-6 w-6 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
+        </div>
+      </div>
+    )
+  }
+
+  if (bons.length === 0) return null
+
+  return (
+    <div className="card">
+      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-gray-700">
+          Bons de Commande
+          <span className="ml-2 inline-flex items-center justify-center h-5 px-1.5 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">{bons.length}</span>
+        </h2>
+      </div>
+
+      <div className="divide-y divide-gray-100">
+        {bons.map((bon) => {
+          const cfg      = BC_STATUS[bon.status] ?? BC_STATUS.DRAFT
+          const isOpen   = expanded === bon.id
+          const proformas= bon.factures_proforma ?? []
+          const selected = bon.fournisseur_selectionne_detail
+          const curPanel = panel[bon.id]
+          const bonIdStr = String(bon.id)
+
+          return (
+            <div key={bon.id}>
+              {/* ── Row header ── */}
+              <button
+                type="button"
+                onClick={() => setExpanded(isOpen ? null : bon.id)}
+                className="w-full flex items-center gap-3 px-6 py-3.5 text-left hover:bg-gray-50 transition-colors"
+              >
+                <span className="font-mono text-xs font-semibold text-gray-700 w-28 flex-shrink-0">{bon.numero}</span>
+                <span className="flex-1 text-sm text-gray-600 truncate">{bon.objet}</span>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cfg.color} flex-shrink-0`}>
+                  {cfg.label}
+                </span>
+                <svg className={`h-4 w-4 text-gray-400 flex-shrink-0 transition-transform ${isOpen ? 'rotate-90' : ''}`}
+                  fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                </svg>
+              </button>
+
+              {isOpen && (
+                <div className="px-6 pb-6 space-y-4 bg-gray-50/40 border-t border-gray-100">
+
+                  {/* Workflow */}
+                  <div className="pt-4">
+                    <BcWorkflowMini status={bon.status} />
+                  </div>
+
+                  {/* Error */}
+                  {actErr[bon.id] && (
+                    <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+                      {actErr[bon.id]}
+                    </div>
+                  )}
+
+                  {/* ── Action buttons ── */}
+                  <div className="flex flex-wrap gap-2">
+                    {bon.status === 'DRAFT' && bcCanWrite(user) && (
+                      <button
+                        onClick={() => doAction(bon.id, soumettreDAF, bonIdStr)}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                        </svg>
+                        Soumettre pour proformas
+                      </button>
+                    )}
+                    {(bon.status === 'DRAFT' || bon.status === 'PENDING_PROFORMA') && bcCanUpload(user) && (
+                      <button
+                        onClick={() => togglePanel(bon.id, 'upload')}
+                        className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
+                          curPanel === 'upload' ? 'bg-gray-200 border-gray-300 text-gray-800' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                        </svg>
+                        {curPanel === 'upload' ? 'Annuler' : 'Ajouter une proforma'}
+                      </button>
+                    )}
+                    {bon.status === 'PENDING_PROFORMA' && bcCanDAF(user) && (
+                      <button
+                        disabled={proformas.length === 0}
+                        onClick={() => togglePanel(bon.id, 'valider')}
+                        title={proformas.length === 0 ? 'Uploadez d\'abord au moins une proforma' : ''}
+                        className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                          curPanel === 'valider' ? 'bg-amber-200 border border-amber-400 text-amber-900' : 'bg-amber-500 text-white hover:bg-amber-600'
+                        }`}
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                        </svg>
+                        Valider les proformas
+                      </button>
+                    )}
+                    {bon.status === 'PENDING_DAF' && bcCanDAF(user) && (
+                      <>
+                        <button onClick={() => togglePanel(bon.id, 'approuver-daf')}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors">
+                          Approuver (DAF)
+                        </button>
+                        <button onClick={() => togglePanel(bon.id, 'rejeter-daf')}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors">
+                          Rejeter
+                        </button>
+                      </>
+                    )}
+                    {bon.status === 'PENDING_DG' && bcCanDG(user) && (
+                      <>
+                        <button onClick={() => togglePanel(bon.id, 'approuver-dg')}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors">
+                          Approuver (DG)
+                        </button>
+                        <button onClick={() => togglePanel(bon.id, 'rejeter-dg')}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors">
+                          Rejeter
+                        </button>
+                      </>
+                    )}
+                    {bon.status === 'APPROVED' && bcCanWrite(user) && (
+                      <button onClick={() => doAction(bon.id, executerBC, bonIdStr)}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+                        Mettre en exécution
+                      </button>
+                    )}
+                    {bon.status === 'IN_EXECUTION' && bcCanWrite(user) && (
+                      <button onClick={() => doAction(bon.id, cloturerBC, bonIdStr)}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-teal-600 text-white hover:bg-teal-700 transition-colors">
+                        Clôturer
+                      </button>
+                    )}
+                  </div>
+
+                  {/* ── Panel: Upload proforma ── */}
+                  {curPanel === 'upload' && (
+                    <form onSubmit={(e) => handleUpload(bon.id, e)} className="rounded-xl border border-dashed border-gray-300 bg-white p-4 space-y-3">
+                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Nouvelle facture proforma</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="form-label text-xs">Fournisseur <span className="text-red-500">*</span></label>
+                          <input type="text" className="form-input"
+                            value={(newPf[bon.id] || {}).fournisseur_nom || ''}
+                            onChange={(e) => setNewPf((p) => ({ ...p, [bon.id]: { ...(p[bon.id] || {}), fournisseur_nom: e.target.value } }))}
+                            placeholder="Nom du fournisseur" required />
+                        </div>
+                        <div>
+                          <label className="form-label text-xs">Référence</label>
+                          <input type="text" className="form-input"
+                            value={(newPf[bon.id] || {}).reference || ''}
+                            onChange={(e) => setNewPf((p) => ({ ...p, [bon.id]: { ...(p[bon.id] || {}), reference: e.target.value } }))}
+                            placeholder="N° devis" />
+                        </div>
+                        <div>
+                          <label className="form-label text-xs">Montant (FCFA)</label>
+                          <input type="number" min="0" step="1" className="form-input"
+                            value={(newPf[bon.id] || {}).montant || ''}
+                            onChange={(e) => setNewPf((p) => ({ ...p, [bon.id]: { ...(p[bon.id] || {}), montant: e.target.value } }))}
+                            placeholder="0" />
+                        </div>
+                        <div>
+                          <label className="form-label text-xs">Fichier (PDF / image)</label>
+                          <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="form-input text-sm"
+                            ref={(el) => { fileRefs.current[bon.id] = el }} />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="form-label text-xs">Notes</label>
+                          <input type="text" className="form-input"
+                            value={(newPf[bon.id] || {}).notes || ''}
+                            onChange={(e) => setNewPf((p) => ({ ...p, [bon.id]: { ...(p[bon.id] || {}), notes: e.target.value } }))}
+                            placeholder="Observations" />
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <button type="button" onClick={() => togglePanel(bon.id, 'upload')} className="btn-secondary text-xs py-1.5">Annuler</button>
+                        <button type="submit" disabled={uploading[bon.id] || !(newPf[bon.id] || {}).fournisseur_nom}
+                          className="btn-primary text-xs py-1.5 flex items-center gap-1.5">
+                          {uploading[bon.id]
+                            ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                            : <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                              </svg>
+                          }
+                          Uploader
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* ── Panel: Valider proformas (DAF choisit le fournisseur) ── */}
+                  {curPanel === 'valider' && (
+                    <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 space-y-3">
+                      <p className="text-xs font-semibold text-amber-900 uppercase tracking-wide">Sélectionner le fournisseur retenu</p>
+                      <div className="space-y-2">
+                        {proformas.map((pf) => (
+                          <label key={pf.id} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                            selPf[bon.id] === String(pf.id) ? 'border-amber-400 bg-amber-100' : 'border-gray-200 bg-white hover:border-amber-300'
+                          }`}>
+                            <input type="radio" name={`pf-${bon.id}`} value={pf.id}
+                              checked={selPf[bon.id] === String(pf.id)}
+                              onChange={(e) => setSelPf((p) => ({ ...p, [bon.id]: e.target.value }))}
+                              className="h-4 w-4 text-amber-500" />
+                            <div className="flex-1 min-w-0">
+                              <span className="font-semibold text-gray-800">{pf.fournisseur_nom}</span>
+                              {pf.reference && <span className="ml-2 text-xs text-gray-500">Réf : {pf.reference}</span>}
+                              {pf.montant && <span className="ml-3 font-bold text-gray-900">{Number(pf.montant).toLocaleString('fr-FR')} FCFA</span>}
+                            </div>
+                            {pf.fichier && (
+                              <a href={pf.fichier} target="_blank" rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-xs text-blue-600 hover:underline flex-shrink-0">
+                                Voir
+                              </a>
+                            )}
+                          </label>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          disabled={!selPf[bon.id]}
+                          onClick={() => doAction(bon.id, validerProformas, { id: bonIdStr, data: { fournisseur_selectionne: selPf[bon.id] } })}
+                          className="btn-primary text-xs py-1.5 disabled:opacity-50">
+                          Valider et soumettre au DAF
+                        </button>
+                        <button onClick={() => togglePanel(bon.id, 'valider')} className="btn-secondary text-xs py-1.5">Annuler</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Panel: DAF/DG comment ── */}
+                  {(curPanel === 'approuver-daf' || curPanel === 'rejeter-daf' || curPanel === 'approuver-dg' || curPanel === 'rejeter-dg') && (
+                    <div className={`rounded-xl border p-4 space-y-3 ${curPanel.includes('rejeter') ? 'border-red-300 bg-red-50' : 'border-green-300 bg-green-50'}`}>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-700">
+                        {curPanel.includes('approuver') ? 'Commentaire (optionnel)' : 'Motif de rejet'}
+                      </p>
+                      <textarea rows={2} className="form-input w-full"
+                        value={comment[bon.id] || ''}
+                        onChange={(e) => setComment((p) => ({ ...p, [bon.id]: e.target.value }))}
+                        placeholder="Votre commentaire…" />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            const data = { commentaire: comment[bon.id] || '' }
+                            if (curPanel === 'approuver-daf') doAction(bon.id, approuverDAF, { id: bonIdStr, data })
+                            if (curPanel === 'rejeter-daf')   doAction(bon.id, rejeterDAF,   { id: bonIdStr, data })
+                            if (curPanel === 'approuver-dg')  doAction(bon.id, approuverDG,  { id: bonIdStr, data })
+                            if (curPanel === 'rejeter-dg')    doAction(bon.id, rejeterDG,    { id: bonIdStr, data })
+                          }}
+                          className={`text-xs py-1.5 px-3 rounded-lg font-medium text-white transition-colors ${
+                            curPanel.includes('rejeter') ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
+                          }`}>
+                          Confirmer
+                        </button>
+                        <button onClick={() => togglePanel(bon.id, curPanel)} className="btn-secondary text-xs py-1.5">Annuler</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Proforma list ── */}
+                  {proformas.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">
+                        Factures proforma ({proformas.length})
+                      </p>
+                      {selected && (
+                        <div className="mb-3 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
+                          <svg className="h-4 w-4 text-green-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                          </svg>
+                          <p className="text-sm font-medium text-green-900">
+                            Retenu : <span className="font-bold">{selected.fournisseur_nom}</span>
+                            {selected.montant && <span className="ml-2 text-xs text-green-700">{formatMontant(selected.montant)}</span>}
+                          </p>
+                        </div>
+                      )}
+                      <div className="space-y-2">
+                        {proformas.map((pf) => {
+                          const isSelected = bon.fournisseur_selectionne === pf.id
+                          const fileUrl = pf.fichier
+                            ? pf.fichier.startsWith('http') ? pf.fichier
+                              : `${import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:8000'}${pf.fichier}`
+                            : null
+                          return (
+                            <div key={pf.id} className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 ${
+                              isSelected ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-white'
+                            }`}>
+                              <svg className="h-5 w-5 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round"
+                                  d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                              </svg>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-800 truncate">{pf.fournisseur_nom}</p>
+                                <p className="text-xs text-gray-500">
+                                  {pf.montant ? formatMontant(pf.montant) : 'Montant non renseigné'}
+                                  {pf.uploaded_at && <> · {formatDate(pf.uploaded_at)}</>}
+                                </p>
+                              </div>
+                              {isSelected && (
+                                <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full flex-shrink-0">Retenu</span>
+                              )}
+                              {/* Sélectionner (DAF, pas encore retenu) */}
+                              {!isSelected && bcCanDAF(user) && ['PENDING_PROFORMA', 'PENDING_DAF', 'PENDING_DG'].includes(bon.status) && (
+                                <button
+                                  onClick={() => doAction(bon.id, selectionnerFourn, { id: bonIdStr, proformaId: pf.id })}
+                                  className="text-xs font-medium text-green-600 hover:text-green-800 border border-green-300 px-2 py-1 rounded-lg hover:bg-green-50 flex-shrink-0">
+                                  Sélectionner
+                                </button>
+                              )}
+                              {fileUrl && (
+                                <a href={fileUrl} target="_blank" rel="noreferrer"
+                                  className="text-xs text-blue-600 hover:underline flex-shrink-0">
+                                  Voir
+                                </a>
+                              )}
+                              {bcCanWrite(user) && (
+                                <button
+                                  onClick={() => doAction(bon.id, deleteProforma, { bonId: bonIdStr, proformaId: pf.id })}
+                                  className="p-1 text-gray-400 hover:text-red-500 flex-shrink-0">
+                                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round"
+                                      d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {proformas.length === 0 && !curPanel && (
+                    <p className="text-xs text-gray-400 italic">Aucune facture proforma uploadée.</p>
+                  )}
+
+                  {/* Link */}
+                  <div className="pt-1 border-t border-gray-100">
+                    <Link to={`/bons-commande/${bon.id}`}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:underline">
+                      Voir le bon de commande complet
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                      </svg>
+                    </Link>
+                  </div>
+
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function FicheDetail({ type }) {
   const { id } = useParams()
@@ -188,6 +686,7 @@ export default function FicheDetail({ type }) {
   const [showExecuteForm,  setShowExecuteForm]  = useState(false)
   const [receivedLoading,  setReceivedLoading]  = useState(false)
   const [receivedError,    setReceivedError]    = useState(null)
+  const [hasBcApproved,    setHasBcApproved]    = useState(false)
 
   const [executeData, setExecuteData] = useState({
     execution_fournisseur:      '',
@@ -218,7 +717,7 @@ export default function FicheDetail({ type }) {
     (fiche?.status === 'PENDING_DIRECTOR' && userRole === 'DAF')
   )
 
-  const canExecute     = fiche?.status === 'APPROVED' && (userRole === 'DAF' || userRole === 'ADMIN' || user?.is_finance_team === true)
+  const canExecute     = fiche?.status === 'APPROVED' && hasBcApproved && (userRole === 'DAF' || userRole === 'ADMIN' || user?.is_finance_team === true)
   const canMarkReceived = fiche?.status === 'IN_EXECUTION' && (isOwner || userRole === 'ADMIN')
 
   // Pre-populate BP items from fiche items when opening form
@@ -527,7 +1026,28 @@ export default function FicheDetail({ type }) {
             </div>
           </div>
 
-          {/* Execution info (after execution) */}
+          {/* ── Bons de commande liés ─────────────────────────────────── */}
+          <BonsCommandeSection
+            ficheType={ficheType}
+            ficheId={Number(id)}
+            user={user}
+            onBcsLoaded={(list) => setHasBcApproved(list.some((b) => BC_APPROVED_STATUSES.includes(b.status)))}
+          />
+
+          {/* Warning: fiche approuvée mais aucun BC validé */}
+          {fiche?.status === 'APPROVED' && !hasBcApproved && (userRole === 'DAF' || userRole === 'ADMIN') && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 flex items-start gap-3">
+              <svg className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+              </svg>
+              <div>
+                <p className="text-sm font-semibold text-amber-800">Bon de commande requis</p>
+                <p className="text-xs text-amber-700 mt-0.5">Un bon de commande doit être approuvé avant d'émettre le bon de paiement.</p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Bon de paiement (exécution) ───────────────────────────── */}
           {fiche.executed_at && (
             <div className="card border-l-4" style={{ borderLeftColor: '#7c3aed' }}>
               <div className="px-6 py-4 border-b border-purple-100 bg-purple-50/30 flex items-center justify-between rounded-t-xl">
@@ -603,6 +1123,7 @@ export default function FicheDetail({ type }) {
               </div>
             </div>
           )}
+
         </div>
 
         {/* ── Right column (workflow + validation) ──────────────────── */}

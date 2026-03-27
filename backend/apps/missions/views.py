@@ -1,0 +1,212 @@
+"""
+Views pour les Fiches de Mission et Absences des Agents de Liaison.
+
+Endpoints FicheMission :
+  GET/POST   /api/missions/
+  GET/PUT/PATCH/DELETE /api/missions/{id}/
+  POST /api/missions/{id}/soumettre/
+  POST /api/missions/{id}/valider/    (Manager → DAF → DG)
+  POST /api/missions/{id}/rejeter/
+  POST /api/missions/{id}/cloturer/
+
+Endpoints AbsenceAgent :
+  GET/POST   /api/missions/absences/
+  GET/PUT/PATCH/DELETE /api/missions/absences/{id}/
+  POST /api/missions/absences/{id}/valider/
+  POST /api/missions/absences/{id}/annuler/
+"""
+
+from rest_framework import filters, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
+from apps.accounts.models import Role
+from .models import AbsenceAgent, AbsenceStatus, FicheMission, FicheMissionStatus
+from .permissions import CanManageAbsence, CanManageMission
+from .serializers import (
+    AbsenceAgentSerializer,
+    FicheMissionListSerializer,
+    FicheMissionSerializer,
+)
+
+
+class FicheMissionViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated, CanManageMission]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ["numero", "nom_prenom", "destination", "objet_mission"]
+    ordering_fields = ["created_at", "date", "status", "destination"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = FicheMission.objects.select_related(
+            "beneficiaire", "agent_liaison", "created_by", "department"
+        ).order_by("-created_at")
+
+        # Filtres
+        status_filter = self.request.query_params.get("status")
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+
+        dept_filter = self.request.query_params.get("department")
+        if dept_filter:
+            qs = qs.filter(department=dept_filter)
+
+        # Restriction par rôle
+        if user.role in (Role.DIRECTOR, Role.DAF, Role.ADMIN) or user.is_staff or user.is_rh:
+            return qs
+        if user.role == Role.MANAGER:
+            return qs.filter(
+                created_by__in=list(user.subordinates.values_list("id", flat=True)) + [user.id]
+            )
+        return qs.filter(created_by=user)
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return FicheMissionListSerializer
+        return FicheMissionSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    # ── Workflow ─────────────────────────────────────────────────────
+
+    @action(detail=True, methods=["post"])
+    def soumettre(self, request, pk=None):
+        """Soumettre la fiche (DRAFT → PENDING_MANAGER)."""
+        mission = self.get_object()
+        if mission.status != FicheMissionStatus.DRAFT:
+            raise ValidationError("Seule une fiche en brouillon peut être soumise.")
+        mission.status = FicheMissionStatus.PENDING_MANAGER
+        mission.save(update_fields=["status", "updated_at"])
+        return Response(FicheMissionSerializer(mission, context={"request": request}).data)
+
+    @action(detail=True, methods=["post"])
+    def valider(self, request, pk=None):
+        """
+        Validation à chaque étape selon le rôle :
+          PENDING_MANAGER → PENDING_DAF    (rôle MANAGER)
+          PENDING_DAF     → PENDING_DG     (rôle DAF)
+          PENDING_DG      → APPROVED       (rôle DIRECTOR)
+        """
+        mission = self.get_object()
+        user = request.user
+        commentaire = request.data.get("commentaire", "")
+
+        transitions = {
+            FicheMissionStatus.PENDING_MANAGER: (
+                [Role.MANAGER, Role.DAF, Role.DIRECTOR, Role.ADMIN],
+                FicheMissionStatus.PENDING_DAF,
+            ),
+            FicheMissionStatus.PENDING_DAF: (
+                [Role.DAF, Role.ADMIN],
+                FicheMissionStatus.PENDING_DG,
+            ),
+            FicheMissionStatus.PENDING_DG: (
+                [Role.DIRECTOR, Role.ADMIN],
+                FicheMissionStatus.APPROVED,
+            ),
+        }
+
+        if mission.status not in transitions:
+            raise ValidationError(f"La fiche ne peut pas être validée depuis le statut '{mission.get_status_display()}'.")
+
+        allowed_roles, next_status = transitions[mission.status]
+        if user.role not in allowed_roles and not user.is_staff and not user.is_rh:
+            raise PermissionDenied("Vous n'avez pas la permission de valider à cette étape.")
+
+        mission.status = next_status
+        if commentaire:
+            mission.notes = (mission.notes + f"\n[{user}] {commentaire}").strip()
+        mission.save(update_fields=["status", "notes", "updated_at"])
+        return Response(FicheMissionSerializer(mission, context={"request": request}).data)
+
+    @action(detail=True, methods=["post"])
+    def rejeter(self, request, pk=None):
+        """Rejeter la fiche à n'importe quelle étape de validation."""
+        mission = self.get_object()
+        user = request.user
+        if mission.status not in (
+            FicheMissionStatus.PENDING_MANAGER,
+            FicheMissionStatus.PENDING_DAF,
+            FicheMissionStatus.PENDING_DG,
+        ):
+            raise ValidationError("La fiche ne peut pas être rejetée dans son état actuel.")
+        if user.role not in (Role.MANAGER, Role.DAF, Role.DIRECTOR, Role.ADMIN) and not user.is_staff and not user.is_rh:
+            raise PermissionDenied("Vous n'avez pas la permission de rejeter.")
+        commentaire = request.data.get("commentaire", "")
+        mission.status = FicheMissionStatus.REJECTED
+        if commentaire:
+            mission.notes = (mission.notes + f"\n[{user}] REJET : {commentaire}").strip()
+        mission.save(update_fields=["status", "notes", "updated_at"])
+        return Response(FicheMissionSerializer(mission, context={"request": request}).data)
+
+    @action(detail=True, methods=["post"])
+    def cloturer(self, request, pk=None):
+        """Clôturer la mission (APPROVED/IN_PROGRESS → DONE)."""
+        mission = self.get_object()
+        if mission.status not in (FicheMissionStatus.APPROVED, FicheMissionStatus.IN_PROGRESS):
+            raise ValidationError("Seule une mission approuvée peut être clôturée.")
+        mission.status = FicheMissionStatus.DONE
+        mission.save(update_fields=["status", "updated_at"])
+        return Response(FicheMissionSerializer(mission, context={"request": request}).data)
+
+
+class AbsenceAgentViewSet(viewsets.ModelViewSet):
+    """
+    Gestion des absences des agents de liaison.
+    Un agent peut déclarer ses propres absences.
+    Un manager/admin peut les valider.
+    """
+    permission_classes = [IsAuthenticated, CanManageAbsence]
+    serializer_class = AbsenceAgentSerializer
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ["agent__first_name", "agent__last_name", "description"]
+    ordering_fields = ["date_debut", "date_fin", "created_at"]
+    ordering = ["-date_debut"]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = AbsenceAgent.objects.select_related("agent", "fiche_mission").order_by("-date_debut")
+
+        status_filter = self.request.query_params.get("status")
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+
+        # Un agent ne voit que ses propres absences (sauf si manager/admin)
+        if user.role not in (Role.MANAGER, Role.DAF, Role.DIRECTOR, Role.ADMIN) and not user.is_staff and not user.is_rh:
+            qs = qs.filter(agent=user)
+
+        return qs
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        # Un agent ne peut déclarer que pour lui-même (sauf admin/manager)
+        agent = serializer.validated_data.get("agent")
+        if agent != user and user.role not in (Role.MANAGER, Role.DAF, Role.DIRECTOR, Role.ADMIN):
+            raise PermissionDenied("Vous ne pouvez déclarer une absence que pour vous-même.")
+        serializer.save()
+
+    @action(detail=True, methods=["post"])
+    def valider(self, request, pk=None):
+        """Valider une absence (DECLARED → VALIDATED)."""
+        absence = self.get_object()
+        if request.user.role not in (Role.MANAGER, Role.DAF, Role.DIRECTOR, Role.ADMIN) and not request.user.is_staff and not request.user.is_rh:
+            raise PermissionDenied("Seul un manager peut valider une absence.")
+        if absence.status != AbsenceStatus.DECLARED:
+            raise ValidationError("Cette absence n'est pas en attente de validation.")
+        absence.status = AbsenceStatus.VALIDATED
+        absence.save(update_fields=["status", "updated_at"])
+        return Response(self.get_serializer(absence).data)
+
+    @action(detail=True, methods=["post"])
+    def annuler(self, request, pk=None):
+        """Annuler une absence."""
+        absence = self.get_object()
+        if absence.status == AbsenceStatus.CANCELLED:
+            raise ValidationError("Cette absence est déjà annulée.")
+        absence.status = AbsenceStatus.CANCELLED
+        absence.save(update_fields=["status", "updated_at"])
+        return Response(self.get_serializer(absence).data)

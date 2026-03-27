@@ -22,6 +22,13 @@ import NotificationsPage from './pages/Notifications/NotificationsPage.jsx'
 import BonsPaiementList from './pages/BonsPaiement/BonsPaiementList.jsx'
 import BonPaiementCreate from './pages/BonsPaiement/BonPaiementCreate.jsx'
 import BonPaiementDetail from './pages/BonsPaiement/BonPaiementDetail.jsx'
+import BonsCommandeList from './pages/BonsCommande/BonsCommandeList.jsx'
+import BonCommandeCreate from './pages/BonsCommande/BonCommandeCreate.jsx'
+import BonCommandeDetail from './pages/BonsCommande/BonCommandeDetail.jsx'
+import FichesMissionList from './pages/Missions/FichesMissionList.jsx'
+import FicheMissionCreate from './pages/Missions/FicheMissionCreate.jsx'
+import FicheMissionDetail from './pages/Missions/FicheMissionDetail.jsx'
+import AbsencesList from './pages/Missions/AbsencesList.jsx'
 
 export default function App() {
   const dispatch = useDispatch()
@@ -65,6 +72,13 @@ export default function App() {
           <Route path="bons-paiement/create" element={<BonPaiementCreate />} />
           <Route path="bons-paiement/:id" element={<BonPaiementDetail />} />
           <Route path="bons-paiement/:id/edit" element={<BonPaiementCreate />} />
+          <Route path="bons-commande" element={<BonsCommandeList />} />
+          <Route path="bons-commande/create" element={<BonCommandeCreate />} />
+          <Route path="bons-commande/:id" element={<BonCommandeDetail />} />
+          <Route path="missions" element={<FichesMissionList />} />
+          <Route path="missions/create" element={<FicheMissionCreate />} />
+          <Route path="missions/:id" element={<FicheMissionDetail />} />
+          <Route path="missions/absences" element={<AbsencesList />} />
         </Route>
 
         {/* 404 */}
