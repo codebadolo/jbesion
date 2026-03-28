@@ -50,7 +50,7 @@ class FicheMissionSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "numero", "matricule_display", "created_at", "updated_at"]
+        read_only_fields = ["id", "numero", "matricule_display", "created_by", "created_at", "updated_at"]
 
 
 class FicheMissionListSerializer(serializers.ModelSerializer):

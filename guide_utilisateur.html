@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Guide Utilisateur — Système de Gestion des Besoins</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue-dark:  #0f2d52;
+      --blue-mid:   #1e3a5f;
+      --blue:       #2563eb;
+      --blue-light: #dbeafe;
+      --green:      #16a34a;
+      --green-light:#dcfce7;
+      --amber:      #d97706;
+      --amber-light:#fef3c7;
+      --red:        #dc2626;
+      --red-light:  #fee2e2;
+      --purple:     #7c3aed;
+      --purple-light:#ede9fe;
+      --teal:       #0d9488;
+      --teal-light: #ccfbf1;
+      --gray-50:    #f9fafb;
+      --gray-100:   #f3f4f6;
+      --gray-200:   #e5e7eb;
+      --gray-400:   #9ca3af;
+      --gray-600:   #4b5563;
+      --gray-700:   #374151;
+      --gray-800:   #1f2937;
+      --gray-900:   #111827;
+    }
+
+    body {
+      font-family: 'Inter', Arial, sans-serif;
+      font-size: 10pt;
+      color: var(--gray-800);
+      line-height: 1.6;
+      background: white;
+    }
+
+    /* ── Page breaks ── */
+    .page-break { page-break-after: always; break-after: always; }
+    .no-break   { page-break-inside: avoid; break-inside: avoid; }
+
+    /* ── Cover ── */
+    .cover {
+      min-height: 100vh;
+      background: linear-gradient(160deg, var(--blue-dark) 0%, #163d6e 50%, #1e4a7a 100%);
+      color: white;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 60px 40px;
+    }
+    .cover-logo {
+      width: 70px; height: 70px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 20px;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 24px;
+      border: 2px solid rgba(255,255,255,0.25);
+    }
+    .cover-title {
+      font-size: 32pt; font-weight: 800; letter-spacing: -0.5px;
+      margin-bottom: 12px; line-height: 1.15;
+    }
+    .cover-subtitle {
+      font-size: 13pt; font-weight: 300; opacity: 0.8;
+      margin-bottom: 40px; max-width: 500px;
+    }
+    .cover-badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 100px;
+      padding: 6px 18px;
+      font-size: 9pt; font-weight: 500;
+      margin-bottom: 8px;
+    }
+    .cover-roles {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      justify-content: center; margin-top: 32px;
+    }
+    .cover-role-chip {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 8px;
+      padding: 6px 14px;
+      font-size: 8.5pt;
+    }
+    .cover-footer {
+      position: absolute; bottom: 32px; font-size: 8pt; opacity: 0.5;
+    }
+
+    /* ── TOC ── */
+    .toc-page {
+      padding: 48px 56px;
+      min-height: 100vh;
+    }
+    .toc-title {
+      font-size: 20pt; font-weight: 700; color: var(--blue-dark);
+      border-bottom: 3px solid var(--blue); padding-bottom: 12px; margin-bottom: 28px;
+    }
+    .toc-section { margin-bottom: 6px; }
+    .toc-role {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 14px; border-radius: 10px;
+      background: var(--gray-50); border-left: 4px solid var(--blue);
+      margin-bottom: 6px; text-decoration: none; color: var(--gray-800);
+    }
+    .toc-role:hover { background: var(--blue-light); }
+    .toc-dot {
+      width: 32px; height: 32px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 9pt; color: white; flex-shrink: 0;
+    }
+    .toc-name { font-weight: 600; font-size: 10.5pt; }
+    .toc-desc { font-size: 8.5pt; color: var(--gray-600); }
+
+    /* ── Section pages ── */
+    .section-page {
+      padding: 48px 56px;
+      min-height: 100vh;
+    }
+
+    /* ── Section header ── */
+    .section-header {
+      display: flex; align-items: flex-start; gap: 20px;
+      margin-bottom: 32px; padding-bottom: 20px;
+      border-bottom: 2px solid var(--gray-200);
+    }
+    .section-icon {
+      width: 56px; height: 56px; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; font-size: 22pt;
+    }
+    .section-role-label {
+      font-size: 8pt; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 1px; opacity: 0.6; margin-bottom: 4px;
+    }
+    .section-title {
+      font-size: 22pt; font-weight: 800; line-height: 1.15;
+      color: var(--gray-900);
+    }
+    .section-subtitle {
+      font-size: 10pt; color: var(--gray-600); margin-top: 6px;
+    }
+
+    /* ── Access badge ── */
+    .access-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+      margin-bottom: 28px;
+    }
+    .access-card {
+      border-radius: 10px; padding: 12px 14px;
+      border: 1px solid var(--gray-200);
+    }
+    .access-card-title {
+      font-size: 8pt; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.8px; margin-bottom: 4px;
+    }
+    .access-card-val {
+      font-size: 9.5pt; font-weight: 500;
+    }
+
+    /* ── Step-by-step ── */
+    h2 {
+      font-size: 13pt; font-weight: 700; color: var(--gray-900);
+      margin: 28px 0 14px; display: flex; align-items: center; gap-8px: ;
+    }
+    h2::before {
+      content: ''; display: inline-block;
+      width: 4px; height: 18px; border-radius: 2px;
+      background: var(--blue); margin-right: 8px; flex-shrink: 0;
+    }
+    h3 {
+      font-size: 10.5pt; font-weight: 600; color: var(--gray-800);
+      margin: 18px 0 8px;
+    }
+
+    .steps { margin: 0; padding: 0; list-style: none; }
+    .step {
+      display: flex; gap: 12px; margin-bottom: 10px; align-items: flex-start;
+    }
+    .step-num {
+      min-width: 24px; height: 24px; border-radius: 6px;
+      background: var(--blue); color: white;
+      font-size: 8.5pt; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; margin-top: 1px;
+    }
+    .step-body { flex: 1; }
+    .step-title { font-weight: 600; font-size: 10pt; }
+    .step-desc  { font-size: 9pt; color: var(--gray-600); margin-top: 2px; }
+
+    /* ── Workflow banner ── */
+    .workflow {
+      display: flex; align-items: center; flex-wrap: wrap;
+      gap: 0; margin: 14px 0; background: var(--gray-50);
+      border: 1px solid var(--gray-200); border-radius: 12px;
+      padding: 12px 16px; overflow: hidden;
+    }
+    .wf-step {
+      display: flex; align-items: center; gap: 6px;
+    }
+    .wf-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--blue); flex-shrink: 0;
+    }
+    .wf-label {
+      font-size: 8pt; font-weight: 500; white-space: nowrap;
+    }
+    .wf-arrow {
+      color: var(--gray-400); font-size: 9pt;
+      margin: 0 6px; flex-shrink: 0;
+    }
+    .wf-dot.active { background: var(--green); width: 12px; height: 12px; }
+    .wf-label.active { color: var(--green); font-weight: 700; }
+
+    /* ── Tip / warning boxes ── */
+    .tip, .warn, .info {
+      border-radius: 10px; padding: 12px 16px;
+      margin: 14px 0; font-size: 9pt; display: flex; gap: 10px;
+      page-break-inside: avoid; break-inside: avoid;
+    }
+    .tip  { background: var(--green-light); border: 1px solid #86efac; }
+    .warn { background: var(--amber-light); border: 1px solid #fcd34d; }
+    .info { background: var(--blue-light);  border: 1px solid #93c5fd; }
+    .tip-icon, .warn-icon, .info-icon { font-size: 13pt; flex-shrink: 0; }
+    .tip-body  b, .warn-body b, .info-body b { font-weight: 600; display: block; margin-bottom: 2px; }
+
+    /* ── Table ── */
+    table {
+      width: 100%; border-collapse: collapse;
+      font-size: 9pt; margin: 12px 0;
+      border-radius: 10px; overflow: hidden;
+      border: 1px solid var(--gray-200);
+    }
+    th {
+      background: var(--gray-100); font-weight: 600; font-size: 8pt;
+      text-transform: uppercase; letter-spacing: 0.5px;
+      padding: 8px 12px; text-align: left; color: var(--gray-600);
+      border-bottom: 1px solid var(--gray-200);
+    }
+    td {
+      padding: 8px 12px; border-bottom: 1px solid var(--gray-100);
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:nth-child(even) td { background: var(--gray-50); }
+
+    /* ── Permission badge ── */
+    .badge {
+      display: inline-block; border-radius: 100px;
+      padding: 2px 8px; font-size: 8pt; font-weight: 600;
+      white-space: nowrap;
+    }
+    .badge-green  { background: var(--green-light); color: #166534; }
+    .badge-red    { background: var(--red-light);   color: #991b1b; }
+    .badge-amber  { background: var(--amber-light);  color: #92400e; }
+    .badge-blue   { background: var(--blue-light);   color: #1e40af; }
+    .badge-gray   { background: var(--gray-100);     color: var(--gray-600); }
+
+    /* ── Divider ── */
+    hr { border: none; border-top: 1px solid var(--gray-200); margin: 24px 0; }
+
+    /* ── Print media ── */
+    @media print {
+      body { font-size: 9.5pt; }
+      .cover { min-height: 100vh; position: relative; }
+      a { color: inherit !important; text-decoration: none !important; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════
+     COUVERTURE
+══════════════════════════════════════════════════════════ -->
+<div class="cover page-break">
+  <div class="cover-logo">
+    <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round"
+        d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z"/>
+    </svg>
+  </div>
+  <div class="cover-badge">Guide Officiel · Version 1.0</div>
+  <div class="cover-title">Système de Gestion<br/>des Besoins &amp; Commandes</div>
+  <div class="cover-subtitle">Guide complet par profil utilisateur — de la création d'une fiche à l'exécution finale</div>
+
+  <div class="cover-roles">
+    <div class="cover-role-chip">👤 Collaborateur</div>
+    <div class="cover-role-chip">👥 Supérieur Hiérarchique</div>
+    <div class="cover-role-chip">💼 DAF</div>
+    <div class="cover-role-chip">🏛️ Directeur Général</div>
+    <div class="cover-role-chip">🔧 Administrateur</div>
+    <div class="cover-role-chip">🚗 Agent de Liaison</div>
+    <div class="cover-role-chip">👩‍💼 RH</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     TABLE DES MATIÈRES
+══════════════════════════════════════════════════════════ -->
+<div class="toc-page page-break">
+  <div class="toc-title">Table des matières</div>
+
+  <a class="toc-role" href="#sec1">
+    <div class="toc-dot" style="background:#2563eb">1</div>
+    <div>
+      <div class="toc-name">Collaborateur (Employé)</div>
+      <div class="toc-desc">Créer et soumettre des fiches de besoin internes</div>
+    </div>
+  </a>
+  <a class="toc-role" href="#sec2">
+    <div class="toc-dot" style="background:#16a34a">2</div>
+    <div>
+      <div class="toc-name">Supérieur Hiérarchique (Manager)</div>
+      <div class="toc-desc">Valider les fiches de son équipe, approuver les missions</div>
+    </div>
+  </a>
+  <a class="toc-role" href="#sec3">
+    <div class="toc-dot" style="background:#d97706">3</div>
+    <div>
+      <div class="toc-name">Directeur Administratif et Financier (DAF)</div>
+      <div class="toc-desc">Gérer les bons de commande, bons de paiement, approuver les achats</div>
+    </div>
+  </a>
+  <a class="toc-role" href="#sec4">
+    <div class="toc-dot" style="background:#7c3aed">4</div>
+    <div>
+      <div class="toc-name">Directeur Général (DG)</div>
+      <div class="toc-desc">Approbation finale des fiches et bons de commande</div>
+    </div>
+  </a>
+  <a class="toc-role" href="#sec5">
+    <div class="toc-dot" style="background:#0d9488">5</div>
+    <div>
+      <div class="toc-name">Agent de Liaison</div>
+      <div class="toc-desc">Gérer ses absences, être affecté aux missions externes</div>
+    </div>
+  </a>
+  <a class="toc-role" href="#sec6">
+    <div class="toc-dot" style="background:#db2777">6</div>
+    <div>
+      <div class="toc-name">Responsable RH</div>
+      <div class="toc-desc">Créer et valider les fiches de mission</div>
+    </div>
+  </a>
+  <a class="toc-role" href="#sec7">
+    <div class="toc-dot" style="background:#111827">7</div>
+    <div>
+      <div class="toc-name">Administrateur Système</div>
+      <div class="toc-desc">Gérer les utilisateurs, départements, configuration globale</div>
+    </div>
+  </a>
+
+  <hr/>
+  <h2 style="font-size:12pt; margin-top:24px">Synthèse des workflows</h2>
+
+  <table style="margin-top:12px">
+    <thead>
+      <tr>
+        <th>Document</th>
+        <th>Circuit d'approbation</th>
+        <th>Exécuté par</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>Fiche Interne</b></td>
+        <td>Créateur → Manager → DAF → DG → Approuvée</td>
+        <td>DAF / Comptable</td>
+      </tr>
+      <tr>
+        <td><b>Fiche Externe</b></td>
+        <td>Créateur → Manager → DG → Approuvée</td>
+        <td>DAF / Comptable</td>
+      </tr>
+      <tr>
+        <td><b>Bon de Commande</b></td>
+        <td>Créateur → Proformas → DAF → DG → Approuvé</td>
+        <td>DAF / Comptable</td>
+      </tr>
+      <tr>
+        <td><b>Bon de Paiement</b></td>
+        <td>Créé par DAF → Validé directement</td>
+        <td>DAF</td>
+      </tr>
+      <tr>
+        <td><b>Fiche de Mission</b></td>
+        <td>RH / Créateur → Manager → DAF → DG → Approuvée</td>
+        <td>RH</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SECTION 1 — COLLABORATEUR
+══════════════════════════════════════════════════════════ -->
+<div class="section-page page-break" id="sec1">
+  <div class="section-header">
+    <div class="section-icon" style="background:#dbeafe;">👤</div>
+    <div>
+      <div class="section-role-label">Profil 1 / 7</div>
+      <div class="section-title" style="color:#1e40af">Collaborateur</div>
+      <div class="section-subtitle">Rôle système : <b>EMPLOYEE</b> — Accès : Fiches internes uniquement</div>
+    </div>
+  </div>
+
+  <div class="access-grid">
+    <div class="access-card" style="background:#dbeafe; border-color:#93c5fd">
+      <div class="access-card-title" style="color:#1e40af">Peut créer</div>
+      <div class="access-card-val">Fiches de besoin internes</div>
+    </div>
+    <div class="access-card" style="background:#f0fdf4; border-color:#86efac">
+      <div class="access-card-title" style="color:#166534">Peut soumettre</div>
+      <div class="access-card-val">Ses propres fiches</div>
+    </div>
+    <div class="access-card" style="background:#fef3c7; border-color:#fcd34d">
+      <div class="access-card-title" style="color:#92400e">Peut confirmer</div>
+      <div class="access-card-val">Réception des commandes</div>
+    </div>
+  </div>
+
+  <h2>Créer une fiche de besoin interne</h2>
+  <div class="workflow no-break">
+    <div class="wf-step"><div class="wf-dot active"></div><div class="wf-label active">Brouillon</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">En attente Manager</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">En attente DAF</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">En attente DG</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">Approuvée</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">En exécution</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">Réceptionnée</div></div>
+  </div>
+
+  <ul class="steps">
+    <li class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Se connecter</div>
+        <div class="step-desc">Accédez à l'application avec votre identifiant et mot de passe fournis par l'administrateur.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Aller dans « Fiches Internes »</div>
+        <div class="step-desc">Dans le menu latéral gauche, cliquez sur <b>Fiches Internes</b>. Vous voyez la liste de vos fiches existantes.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Cliquer sur « Nouvelle Fiche »</div>
+        <div class="step-desc">Bouton en haut à droite. Le formulaire de création s'ouvre.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <div class="step-title">Remplir le formulaire</div>
+        <div class="step-desc">Saisissez l'objet du besoin, ajoutez les articles avec désignation, quantité et montant estimé. Précisez votre département.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <div class="step-title">Enregistrer en brouillon</div>
+        <div class="step-desc">Cliquez sur <b>Enregistrer</b>. La fiche est en statut <b>Brouillon</b> — vous pouvez la modifier à tout moment.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <div class="step-title">Soumettre la fiche</div>
+        <div class="step-desc">Une fois prête, ouvrez la fiche et cliquez sur <b>Soumettre</b>. Elle passe en <b>En attente du Manager</b>. Vous ne pouvez plus la modifier.</div>
+      </div>
+    </li>
+  </ul>
+
+  <div class="tip no-break">
+    <div class="tip-icon">✅</div>
+    <div class="tip-body">
+      <b>Confirmer la réception</b>
+      Lorsque la fiche est en statut <b>En cours d'exécution</b> et que vous avez effectivement reçu le bien ou service, ouvrez la fiche et cliquez sur <b>Marquer comme reçu</b>. Cela clôture le cycle.
+    </div>
+  </div>
+
+  <div class="warn no-break">
+    <div class="warn-icon">⚠️</div>
+    <div class="warn-body">
+      <b>Une fois soumise, impossible de modifier</b>
+      Si vous avez fait une erreur après soumission, contactez votre Manager pour qu'il demande une clarification ou rejette la fiche afin que vous puissiez la corriger.
+    </div>
+  </div>
+
+  <h2>Suivre l'avancement d'une fiche</h2>
+  <p style="font-size:9.5pt; color:var(--gray-600); margin-bottom:10px">Depuis la liste des fiches internes, chaque ligne affiche le statut actuel. Cliquez sur une fiche pour voir le détail complet et l'historique des validations.</p>
+  <table>
+    <thead><tr><th>Statut affiché</th><th>Signification</th><th>Action possible</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge badge-gray">Brouillon</span></td><td>Fiche créée mais pas encore soumise</td><td>Modifier, Soumettre, Supprimer</td></tr>
+      <tr><td><span class="badge badge-amber">En attente Manager</span></td><td>Transmise à votre supérieur</td><td>Consulter uniquement</td></tr>
+      <tr><td><span class="badge badge-amber">En attente DAF</span></td><td>Validée par le Manager, chez le DAF</td><td>Consulter uniquement</td></tr>
+      <tr><td><span class="badge badge-amber">En attente DG</span></td><td>Validée par le DAF, chez le DG</td><td>Consulter uniquement</td></tr>
+      <tr><td><span class="badge badge-green">Approuvée</span></td><td>Fiche approuvée par la Direction</td><td>Consulter uniquement</td></tr>
+      <tr><td><span class="badge badge-blue">En exécution</span></td><td>En cours de traitement par la comptabilité</td><td>Marquer comme reçu</td></tr>
+      <tr><td><span class="badge badge-red">Rejetée</span></td><td>Refusée à une étape — voir le motif dans les notes</td><td>Créer une nouvelle fiche corrigée</td></tr>
+    </tbody>
+  </table>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SECTION 2 — MANAGER
+══════════════════════════════════════════════════════════ -->
+<div class="section-page page-break" id="sec2">
+  <div class="section-header">
+    <div class="section-icon" style="background:#dcfce7;">👥</div>
+    <div>
+      <div class="section-role-label">Profil 2 / 7</div>
+      <div class="section-title" style="color:#166534">Supérieur Hiérarchique</div>
+      <div class="section-subtitle">Rôle système : <b>MANAGER</b> — Premier niveau de validation</div>
+    </div>
+  </div>
+
+  <div class="access-grid">
+    <div class="access-card" style="background:#dcfce7; border-color:#86efac">
+      <div class="access-card-title" style="color:#166534">Valide</div>
+      <div class="access-card-val">Fiches internes, fiches externes, missions de son équipe</div>
+    </div>
+    <div class="access-card" style="background:#dbeafe; border-color:#93c5fd">
+      <div class="access-card-title" style="color:#1e40af">Consulte</div>
+      <div class="access-card-val">Toutes les fiches de son département</div>
+    </div>
+    <div class="access-card" style="background:#fef3c7; border-color:#fcd34d">
+      <div class="access-card-title" style="color:#92400e">Crée</div>
+      <div class="access-card-val">Ses propres fiches de besoin</div>
+    </div>
+  </div>
+
+  <h2>Valider une fiche de besoin</h2>
+  <ul class="steps">
+    <li class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Accéder aux fiches en attente</div>
+        <div class="step-desc">Dans le menu, allez dans <b>Fiches Internes</b>. Filtrez par statut <b>En attente du Supérieur</b> pour voir uniquement celles qui vous attendent.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Examiner le détail</div>
+        <div class="step-desc">Cliquez sur la fiche. Vérifiez les articles, les quantités, la justification et les montants estimés. Consultez l'historique des validations.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Valider ou rejeter</div>
+        <div class="step-desc">
+          <b>Valider :</b> Cliquez sur <b>Valider</b>. La fiche est transmise au DAF (fiche interne) ou au DG (fiche externe).<br/>
+          <b>Rejeter :</b> Cliquez sur <b>Rejeter</b> et saisissez un motif. La fiche retourne chez le créateur.
+        </div>
+      </div>
+    </li>
+  </ul>
+
+  <h2>Valider une fiche de mission</h2>
+  <div class="workflow no-break">
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">Brouillon</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot active"></div><div class="wf-label active">Attente Manager ← Vous</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">Attente DAF</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">Attente DG</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">Approuvée</div></div>
+  </div>
+  <p style="font-size:9.5pt; color:var(--gray-600)">Allez dans <b>Missions</b>, filtrez par <b>En attente du Supérieur</b>, ouvrez la fiche, vérifiez la destination, les dates et les frais, puis validez ou rejetez.</p>
+
+  <div class="info no-break">
+    <div class="info-icon">ℹ️</div>
+    <div class="info-body">
+      <b>Demande de clarification</b>
+      Sur les fiches internes, si vous avez besoin d'informations supplémentaires avant de valider, utilisez le bouton <b>Demander clarification</b>. Le créateur recevra une notification et devra répondre avant que vous ne puissiez valider.
+    </div>
+  </div>
+
+  <h2>Tableau récapitulatif des droits Manager</h2>
+  <table>
+    <thead><tr><th>Module</th><th>Lire</th><th>Créer</th><th>Valider / Rejeter</th><th>Modifier</th><th>Supprimer</th></tr></thead>
+    <tbody>
+      <tr><td>Fiches Internes</td><td><span class="badge badge-green">✓ Toutes</span></td><td><span class="badge badge-green">✓</span></td><td><span class="badge badge-green">✓ Étape Manager</span></td><td><span class="badge badge-amber">Brouillon seulement</span></td><td><span class="badge badge-red">✗</span></td></tr>
+      <tr><td>Fiches Externes</td><td><span class="badge badge-green">✓ Toutes</span></td><td><span class="badge badge-green">✓</span></td><td><span class="badge badge-green">✓ Étape Manager</span></td><td><span class="badge badge-amber">Brouillon seulement</span></td><td><span class="badge badge-red">✗</span></td></tr>
+      <tr><td>Fiches de Mission</td><td><span class="badge badge-green">✓ Équipe</span></td><td><span class="badge badge-red">✗</span></td><td><span class="badge badge-green">✓ Étape Manager</span></td><td><span class="badge badge-red">✗</span></td><td><span class="badge badge-red">✗</span></td></tr>
+      <tr><td>Bons de Commande</td><td><span class="badge badge-green">✓</span></td><td><span class="badge badge-red">✗</span></td><td><span class="badge badge-red">✗</span></td><td><span class="badge badge-red">✗</span></td><td><span class="badge badge-red">✗</span></td></tr>
+      <tr><td>Utilisateurs</td><td><span class="badge badge-red">✗</span></td><td><span class="badge badge-red">✗</span></td><td><span class="badge badge-red">✗</span></td><td><span class="badge badge-red">✗</span></td><td><span class="badge badge-red">✗</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SECTION 3 — DAF
+══════════════════════════════════════════════════════════ -->
+<div class="section-page page-break" id="sec3">
+  <div class="section-header">
+    <div class="section-icon" style="background:#fef3c7;">💼</div>
+    <div>
+      <div class="section-role-label">Profil 3 / 7</div>
+      <div class="section-title" style="color:#92400e">Directeur Administratif et Financier</div>
+      <div class="section-subtitle">Rôle système : <b>DAF</b> — Gestion financière et approbation des achats</div>
+    </div>
+  </div>
+
+  <div class="access-grid">
+    <div class="access-card" style="background:#fef3c7; border-color:#fcd34d">
+      <div class="access-card-title" style="color:#92400e">Gère</div>
+      <div class="access-card-val">Bons de commande, bons de paiement</div>
+    </div>
+    <div class="access-card" style="background:#dcfce7; border-color:#86efac">
+      <div class="access-card-title" style="color:#166534">Valide</div>
+      <div class="access-card-val">Fiches internes (étape DAF), Bons de commande, Missions</div>
+    </div>
+    <div class="access-card" style="background:#dbeafe; border-color:#93c5fd">
+      <div class="access-card-title" style="color:#1e40af">Exécute</div>
+      <div class="access-card-val">Fiches approuvées (mise en exécution)</div>
+    </div>
+  </div>
+
+  <h2>Circuit complet d'un bon de commande</h2>
+  <div class="workflow no-break">
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">Brouillon</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">Proformas</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot active"></div><div class="wf-label active">DAF ← Vous</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">DG</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">Approuvé</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">Exécution</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">Clôturé</div></div>
+  </div>
+
+  <ul class="steps">
+    <li class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Créer un bon de commande (BC)</div>
+        <div class="step-desc">Dans le détail d'une fiche approuvée, section <b>Bons de Commande</b>, cliquez sur <b>+ Nouveau Bon de Commande</b>. Renseignez la date, référence, objet, notes, et les factures proforma.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Joindre les factures proforma</div>
+        <div class="step-desc">Lors de la création ou depuis le détail du BC, uploadez les PDF des devis fournisseurs. Chaque proforma indique : fournisseur, référence, montant, fichier.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Valider les proformas</div>
+        <div class="step-desc">Une fois les proformas vérifiés, cliquez <b>Valider les proformas</b> dans le BC. Le BC passe en <b>En attente DAF</b>.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <div class="step-title">Sélectionner le fournisseur retenu</div>
+        <div class="step-desc">Indiquez quelle proforma a été retenue (fournisseur choisi). Puis <b>Approuver côté DAF</b> pour transmettre au DG.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <div class="step-title">Après approbation DG : mettre en exécution</div>
+        <div class="step-desc">Lorsque le DG a approuvé, cliquez sur <b>Exécuter</b> puis clôturez le BC une fois la commande passée.</div>
+      </div>
+    </li>
+  </ul>
+
+  <h2>Émettre un bon de paiement</h2>
+  <ul class="steps">
+    <li class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Ouvrir une fiche approuvée avec BC validé</div>
+        <div class="step-desc">Un avertissement s'affiche si la fiche est approuvée sans BC validé. Assurez-vous qu'au moins un BC est approuvé.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Créer le bon de paiement</div>
+        <div class="step-desc">Section <b>Bons de Paiement</b>, cliquez <b>+ Nouveau Bon de Paiement</b>. Renseignez bénéficiaire, motif, mode de paiement (Espèces / Chèque), montant, articles.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Valider le bon de paiement</div>
+        <div class="step-desc">Depuis la liste, cliquez <b>Valider</b> sur le bon de paiement pour le marquer comme émis.</div>
+      </div>
+    </li>
+  </ul>
+
+  <h2>Exécuter une fiche approuvée</h2>
+  <p style="font-size:9.5pt; color:var(--gray-600); margin-bottom:8px">Quand une fiche (interne ou externe) passe au statut Approuvée, le DAF peut la mettre en exécution :</p>
+  <ul class="steps">
+    <li class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Cliquer sur « Exécuter »</div>
+        <div class="step-desc">Bouton visible en bas du détail de la fiche. Renseignez le fournisseur, référence BC, montant décaissé, mode de paiement, n° facture et observations.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Confirmer</div>
+        <div class="step-desc">La fiche passe en <b>En cours d'exécution</b>. Le créateur de la fiche recevra une notification et pourra marquer la réception.</div>
+      </div>
+    </li>
+  </ul>
+
+  <div class="tip no-break">
+    <div class="tip-icon">✅</div>
+    <div class="tip-body">
+      <b>Consulter la liste des utilisateurs</b>
+      Le DAF peut accéder à la liste des utilisateurs (lecture seule) depuis le menu <b>Administration → Utilisateurs</b> pour vérifier les informations des agents.
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SECTION 4 — DIRECTEUR GÉNÉRAL
+══════════════════════════════════════════════════════════ -->
+<div class="section-page page-break" id="sec4">
+  <div class="section-header">
+    <div class="section-icon" style="background:#ede9fe;">🏛️</div>
+    <div>
+      <div class="section-role-label">Profil 4 / 7</div>
+      <div class="section-title" style="color:#5b21b6">Directeur Général</div>
+      <div class="section-subtitle">Rôle système : <b>DIRECTOR</b> — Approbation finale</div>
+    </div>
+  </div>
+
+  <div class="access-grid">
+    <div class="access-card" style="background:#ede9fe; border-color:#c4b5fd">
+      <div class="access-card-title" style="color:#5b21b6">Approuve en final</div>
+      <div class="access-card-val">Fiches internes, fiches externes, bons de commande, missions</div>
+    </div>
+    <div class="access-card" style="background:#dbeafe; border-color:#93c5fd">
+      <div class="access-card-title" style="color:#1e40af">Consulte</div>
+      <div class="access-card-val">Tous les documents, tous les utilisateurs (lecture)</div>
+    </div>
+    <div class="access-card" style="background:#fef3c7; border-color:#fcd34d">
+      <div class="access-card-title" style="color:#92400e">Tableau de bord</div>
+      <div class="access-card-val">Vue d'ensemble des indicateurs</div>
+    </div>
+  </div>
+
+  <h2>Approuver une fiche interne</h2>
+  <div class="workflow no-break">
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">Brouillon</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">Manager</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">DAF</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot active"></div><div class="wf-label active">DG ← Vous</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">Approuvée</div></div>
+  </div>
+
+  <ul class="steps">
+    <li class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Voir les fiches en attente de votre signature</div>
+        <div class="step-desc">Depuis le tableau de bord ou la liste des fiches, filtrez par statut <b>En attente du DG</b>.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Examiner le dossier complet</div>
+        <div class="step-desc">Le détail affiche les articles, les montants, les bons de commande liés (avec leurs proformas) et l'historique complet des validations antérieures.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Valider ou rejeter</div>
+        <div class="step-desc">
+          <b>Approuver :</b> La fiche est définitivement approuvée et le DAF peut passer à l'exécution.<br/>
+          <b>Rejeter / Demander clarification :</b> Saisissez un commentaire détaillé.
+        </div>
+      </div>
+    </li>
+  </ul>
+
+  <h2>Approuver un bon de commande</h2>
+  <div class="workflow no-break">
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">Brouillon</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">Proformas</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">DAF</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot active"></div><div class="wf-label active">DG ← Vous</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">Approuvé</div></div>
+  </div>
+  <p style="font-size:9.5pt; color:var(--gray-600); margin-top:6px">Dans le détail d'une fiche, ouvrez le bon de commande en statut <b>En attente DG</b>. Vérifiez le fournisseur sélectionné et le montant. Cliquez <b>Approuver côté DG</b> ou <b>Rejeter</b>.</p>
+
+  <h2>Tableau de bord DG</h2>
+  <p style="font-size:9.5pt; color:var(--gray-600); margin-bottom:10px">La page d'accueil vous présente :</p>
+  <table>
+    <thead><tr><th>Indicateur</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td>Fiches en attente</td><td>Nombre de fiches qui attendent votre signature aujourd'hui</td></tr>
+      <tr><td>BCs en attente</td><td>Bons de commande transmis par le DAF pour votre approbation</td></tr>
+      <tr><td>Budget mensuel</td><td>Total des montants des fiches approuvées ce mois</td></tr>
+      <tr><td>Missions en attente</td><td>Fiches de mission à approuver (dernière étape)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="info no-break">
+    <div class="info-icon">ℹ️</div>
+    <div class="info-body">
+      <b>Accès en lecture à la liste des utilisateurs</b>
+      Vous pouvez consulter la liste complète du personnel depuis <b>Administration → Utilisateurs</b>. Vous ne pouvez pas créer, modifier ou supprimer d'utilisateurs (rôle Administrateur uniquement).
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SECTION 5 — AGENT DE LIAISON
+══════════════════════════════════════════════════════════ -->
+<div class="section-page page-break" id="sec5">
+  <div class="section-header">
+    <div class="section-icon" style="background:#ccfbf1;">🚗</div>
+    <div>
+      <div class="section-role-label">Profil 5 / 7</div>
+      <div class="section-title" style="color:#0f766e">Agent de Liaison</div>
+      <div class="section-subtitle">Attribut : <b>is_agent_liaison = Oui</b> — Personnel terrain, peut déclarer ses absences</div>
+    </div>
+  </div>
+
+  <div class="access-grid">
+    <div class="access-card" style="background:#ccfbf1; border-color:#5eead4">
+      <div class="access-card-title" style="color:#0f766e">Déclare</div>
+      <div class="access-card-val">Ses propres absences (déplacements, formations)</div>
+    </div>
+    <div class="access-card" style="background:#dbeafe; border-color:#93c5fd">
+      <div class="access-card-title" style="color:#1e40af">Apparaît dans</div>
+      <div class="access-card-val">Dropdown « Agent de liaison » sur les fiches de mission</div>
+    </div>
+    <div class="access-card" style="background:#f0fdf4; border-color:#86efac">
+      <div class="access-card-title" style="color:#166534">Peut créer</div>
+      <div class="access-card-val">Fiches de besoin internes (comme tout collaborateur)</div>
+    </div>
+  </div>
+
+  <h2>Déclarer une absence</h2>
+  <p style="font-size:9.5pt; color:var(--gray-600); margin-bottom:10px">Lorsque vous partez en déplacement, en formation ou pour toute activité externe, déclarez votre absence dans le système :</p>
+  <ul class="steps">
+    <li class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Aller dans « Missions → Mes Absences »</div>
+        <div class="step-desc">Depuis le menu, accédez à la section Absences.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Créer une absence</div>
+        <div class="step-desc">Renseignez la date de début, date de fin, le motif (Mission / Formation / Activité / Autre) et une description. Si une fiche de mission existe déjà, vous pouvez la relier.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Attendre la validation</div>
+        <div class="step-desc">Votre manager recevra une notification et validera l'absence. Statuts : <b>Déclarée → Validée</b> (ou Annulée).</div>
+      </div>
+    </li>
+  </ul>
+
+  <h2>Être affecté à une mission externe</h2>
+  <p style="font-size:9.5pt; color:var(--gray-600); margin-bottom:10px">Quand la RH ou un manager crée une fiche de mission liée à une fiche externe, votre nom peut apparaître en tant qu'<b>Agent de liaison</b> affecté. Vous recevez alors une notification.</p>
+
+  <table>
+    <thead><tr><th>Statut de l'absence</th><th>Signification</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge badge-amber">Déclarée</span></td><td>Absence soumise, en attente de validation par votre manager</td></tr>
+      <tr><td><span class="badge badge-green">Validée</span></td><td>Absence approuvée par votre manager</td></tr>
+      <tr><td><span class="badge badge-red">Annulée</span></td><td>Absence annulée (par vous ou votre manager)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="warn no-break">
+    <div class="warn-icon">⚠️</div>
+    <div class="warn-body">
+      <b>Déclarez avant de partir</b>
+      La déclaration d'absence permet à la direction de suivre les déplacements du personnel terrain. Pensez à la créer avant votre départ et à la relier à la fiche de mission si elle existe.
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SECTION 6 — RH
+══════════════════════════════════════════════════════════ -->
+<div class="section-page page-break" id="sec6">
+  <div class="section-header">
+    <div class="section-icon" style="background:#fce7f3;">👩‍💼</div>
+    <div>
+      <div class="section-role-label">Profil 6 / 7</div>
+      <div class="section-title" style="color:#be185d">Responsable RH</div>
+      <div class="section-subtitle">Attribut : <b>is_rh = Oui</b> — Gestion des fiches de mission et absences</div>
+    </div>
+  </div>
+
+  <div class="access-grid">
+    <div class="access-card" style="background:#fce7f3; border-color:#f9a8d4">
+      <div class="access-card-title" style="color:#be185d">Crée &amp; gère</div>
+      <div class="access-card-val">Toutes les fiches de mission</div>
+    </div>
+    <div class="access-card" style="background:#dcfce7; border-color:#86efac">
+      <div class="access-card-title" style="color:#166534">Valide</div>
+      <div class="access-card-val">Missions à toutes les étapes, absences des agents</div>
+    </div>
+    <div class="access-card" style="background:#dbeafe; border-color:#93c5fd">
+      <div class="access-card-title" style="color:#1e40af">Consulte</div>
+      <div class="access-card-val">Toutes les fiches (lecture)</div>
+    </div>
+  </div>
+
+  <h2>Créer une fiche de mission</h2>
+  <p style="font-size:9.5pt; color:var(--gray-600); margin-bottom:10px">La RH peut créer une fiche de mission depuis deux endroits :</p>
+
+  <h3>Option A — Depuis le menu Missions</h3>
+  <ul class="steps">
+    <li class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Aller dans « Missions »</div>
+        <div class="step-desc">Cliquez sur <b>+ Nouvelle Mission</b>.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Remplir le formulaire</div>
+        <div class="step-desc">Saisissez : date, bénéficiaire (interne ou nom libre), fonction, destination, objet de la mission, dates départ/retour, frais (hébergement, restauration, transport, autres), département, agent de liaison si applicable.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Lier à une fiche externe (optionnel)</div>
+        <div class="step-desc">Si la mission est liée à une fiche externe, renseignez l'ID de la fiche externe dans le champ correspondant.</div>
+      </div>
+    </li>
+  </ul>
+
+  <h3>Option B — Depuis le détail d'une fiche externe</h3>
+  <ul class="steps">
+    <li class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Ouvrir une fiche externe</div>
+        <div class="step-desc">Dans la section <b>Missions</b> en bas du détail de la fiche externe, cliquez sur <b>Nouvelle mission</b>.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Le lien est automatique</div>
+        <div class="step-desc">L'ID de la fiche externe est pré-rempli. Choisissez l'agent de liaison dans la liste des agents internes. Complétez les autres champs et créez.</div>
+      </div>
+    </li>
+  </ul>
+
+  <h2>Workflow validation mission</h2>
+  <div class="workflow no-break">
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">Brouillon</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot active"></div><div class="wf-label active">Manager ← RH peut valider</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot active"></div><div class="wf-label active">DAF ← RH peut valider</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">DG</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">Approuvée</div></div>
+    <div class="wf-arrow">→</div>
+    <div class="wf-step"><div class="wf-dot"></div><div class="wf-label">Clôturée</div></div>
+  </div>
+  <p style="font-size:9pt; color:var(--gray-600); margin-top:6px">La RH peut valider les fiches de mission à l'étape Manager et DAF. Elle ne peut pas approuver à l'étape DG (réservé au Directeur Général).</p>
+
+  <h2>Valider les absences des agents</h2>
+  <ul class="steps">
+    <li class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Aller dans « Missions → Absences »</div>
+        <div class="step-desc">Filtrez par statut <b>Déclarée</b> pour voir les absences en attente.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Valider ou annuler</div>
+        <div class="step-desc">Cliquez sur l'absence, vérifiez les informations, puis cliquez <b>Valider</b> pour confirmer le déplacement ou <b>Annuler</b> si nécessaire.</div>
+      </div>
+    </li>
+  </ul>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SECTION 7 — ADMINISTRATEUR
+══════════════════════════════════════════════════════════ -->
+<div class="section-page page-break" id="sec7">
+  <div class="section-header">
+    <div class="section-icon" style="background:#f3f4f6;">🔧</div>
+    <div>
+      <div class="section-role-label">Profil 7 / 7</div>
+      <div class="section-title" style="color:#111827">Administrateur Système</div>
+      <div class="section-subtitle">Rôle système : <b>ADMIN</b> — Accès complet à tous les modules</div>
+    </div>
+  </div>
+
+  <div class="access-grid">
+    <div class="access-card" style="background:#fee2e2; border-color:#fca5a5">
+      <div class="access-card-title" style="color:#991b1b">Accès total</div>
+      <div class="access-card-val">Lecture, écriture, suppression sur tous les modules</div>
+    </div>
+    <div class="access-card" style="background:#fef3c7; border-color:#fcd34d">
+      <div class="access-card-title" style="color:#92400e">Gère</div>
+      <div class="access-card-val">Utilisateurs, départements, rôles, attributs spéciaux</div>
+    </div>
+    <div class="access-card" style="background:#dcfce7; border-color:#86efac">
+      <div class="access-card-title" style="color:#166534">Peut valider</div>
+      <div class="access-card-val">Fiches, BCs, missions à n'importe quelle étape</div>
+    </div>
+  </div>
+
+  <h2>Gérer les utilisateurs</h2>
+  <ul class="steps">
+    <li class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Accéder à « Administration → Utilisateurs »</div>
+        <div class="step-desc">Vue complète avec statistiques : total utilisateurs actifs, répartition par rôle, agents de liaison.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Créer un utilisateur</div>
+        <div class="step-desc">Cliquez <b>+ Nouvel utilisateur</b>. Renseignez nom, prénom, username, email, département, rôle, et les attributs spéciaux (agent de liaison, comptable, RH). Définissez un mot de passe provisoire.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Modifier un utilisateur</div>
+        <div class="step-desc">Cliquez sur l'icône crayon. Modifiez les informations souhaitées. Le mot de passe n'est changé que si vous renseignez les champs Nouveau mot de passe et Confirmer.</div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <div class="step-title">Désactiver un utilisateur</div>
+        <div class="step-desc">Décochez « Actif » dans la modification. L'utilisateur ne peut plus se connecter mais ses données sont conservées.</div>
+      </div>
+    </li>
+  </ul>
+
+  <h2>Gérer les départements</h2>
+  <p style="font-size:9.5pt; color:var(--gray-600); margin-bottom:10px">Dans <b>Administration → Départements</b>, vous pouvez créer, modifier ou supprimer des départements. Chaque département a un nom et un code (ex : AF pour Administratif et Financier).</p>
+
+  <div class="warn no-break">
+    <div class="warn-icon">⚠️</div>
+    <div class="warn-body">
+      <b>Supprimer un département</b>
+      Un département ne peut être supprimé que s'il n'a aucun utilisateur ni fiche rattaché. Réaffectez d'abord les éléments liés.
+    </div>
+  </div>
+
+  <h2>Attributs spéciaux des utilisateurs</h2>
+  <table>
+    <thead><tr><th>Attribut</th><th>Effet</th><th>À qui donner</th></tr></thead>
+    <tbody>
+      <tr><td><b>is_agent_liaison</b></td><td>Apparaît dans la liste des agents de liaison pour les missions. Peut déclarer ses absences.</td><td>Personnel terrain, représentants</td></tr>
+      <tr><td><b>is_comptable</b></td><td>Peut créer et gérer les Bons de Commande (même sans rôle DAF)</td><td>Comptables du département AF</td></tr>
+      <tr><td><b>is_rh</b></td><td>Peut créer et valider toutes les fiches de mission, valider les absences</td><td>Responsable RH</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Récupérer un mot de passe oublié</h2>
+  <p style="font-size:9.5pt; color:var(--gray-600)">Si un utilisateur ne peut plus se connecter, l'administrateur peut modifier son mot de passe depuis la fiche utilisateur (champ <b>Nouveau mot de passe</b> + <b>Confirmer</b>) et le lui communiquer en interne.</p>
+
+  <div class="info no-break">
+    <div class="info-icon">ℹ️</div>
+    <div class="info-body">
+      <b>Vous ne pouvez pas supprimer votre propre compte</b>
+      Le système empêche tout administrateur de supprimer le compte avec lequel il est connecté. Faites-le depuis un autre compte administrateur si nécessaire.
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     PAGE DE CLÔTURE
+══════════════════════════════════════════════════════════ -->
+<div class="cover" style="min-height:60vh; justify-content:center">
+  <div style="font-size:40pt; margin-bottom:16px">📋</div>
+  <div style="font-size:18pt; font-weight:700; margin-bottom:8px">Guide Utilisateur — v1.0</div>
+  <div style="font-size:10pt; opacity:0.7; max-width:420px; text-align:center">
+    Pour toute question ou demande d'accès supplémentaire, contactez votre administrateur système.
+  </div>
+  <div style="margin-top:28px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); border-radius:12px; padding:16px 28px; font-size:9pt; opacity:0.8">
+    Mars 2026 · Usage interne uniquement
+  </div>
+</div>
+
+</body>
+</html>

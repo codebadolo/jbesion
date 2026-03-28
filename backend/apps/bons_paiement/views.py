@@ -56,6 +56,10 @@ class BonPaiementViewSet(viewsets.ModelViewSet):
             qs = qs.filter(status=status_filter)
         if mode_filter:
             qs = qs.filter(mode_paiement=mode_filter)
+        fiche_type_filter = self.request.query_params.get("fiche_type")
+        fiche_id_filter   = self.request.query_params.get("fiche_id")
+        if fiche_type_filter and fiche_id_filter:
+            qs = qs.filter(fiche_type=fiche_type_filter, fiche_id=fiche_id_filter)
         return qs
 
     def get_serializer_class(self):

@@ -134,6 +134,83 @@ function FormField({ label, error, required, children }) {
   )
 }
 
+// ── Stats cards ───────────────────────────────────────────────────────────────
+
+function StatsCards({ users }) {
+  const total      = users.length
+  const actifs     = users.filter((u) => u.is_active !== false).length
+  const admins     = users.filter((u) => u.role === 'ADMIN').length
+  const directors  = users.filter((u) => u.role === 'DIRECTOR').length
+  const dafs       = users.filter((u) => u.role === 'DAF').length
+  const managers   = users.filter((u) => u.role === 'MANAGER').length
+  const employees  = users.filter((u) => u.role === 'EMPLOYEE').length
+  const agents     = users.filter((u) => u.is_agent_liaison).length
+
+  const cards = [
+    {
+      label: 'Utilisateurs',
+      value: total,
+      sub: `${actifs} actifs`,
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+        </svg>
+      ),
+      bg: 'bg-[#1e3a5f]',
+    },
+    {
+      label: 'Collaborateurs',
+      value: employees,
+      sub: `${managers} managers`,
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 0 0 .75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 0 0-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0 1 12 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 0 1-.673-.38m0 0A2.18 2.18 0 0 1 3 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 0 1 3.413-.387m7.5 0V5.25A2.25 2.25 0 0 0 13.5 3h-3a2.25 2.25 0 0 0-2.25 2.25v.894m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+        </svg>
+      ),
+      bg: 'bg-[#1e4a7a]',
+    },
+    {
+      label: 'Direction & DAF',
+      value: directors + dafs,
+      sub: `${directors} DG · ${dafs} DAF`,
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
+        </svg>
+      ),
+      bg: 'bg-[#163d6e]',
+    },
+    {
+      label: 'Agents de liaison',
+      value: agents,
+      sub: `${admins} admin${admins > 1 ? 's' : ''}`,
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 0 0-10.026 0 1.106 1.106 0 0 0-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
+        </svg>
+      ),
+      bg: 'bg-[#0f2d52]',
+    },
+  ]
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      {cards.map((c) => (
+        <div key={c.label} className={`${c.bg} rounded-xl px-5 py-4 text-white shadow`}>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-medium text-blue-200 uppercase tracking-wide">{c.label}</p>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10">
+              {c.icon}
+            </div>
+          </div>
+          <p className="text-3xl font-bold">{c.value}</p>
+          <p className="mt-1 text-xs text-blue-200">{c.sub}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function UsersList() {
@@ -288,7 +365,8 @@ export default function UsersList() {
         is_rh: form.is_rh,
       }
       if (!editingUser || form.password) {
-        payload.password = form.password
+        payload.password         = form.password
+        payload.password_confirm = form.password_confirm
       }
 
       if (editingUser) {
@@ -355,6 +433,9 @@ export default function UsersList() {
           </button>
         )}
       </div>
+
+      {/* Stats */}
+      {!loading && !error && <StatsCards users={users} />}
 
       {/* Search */}
       <div className="relative w-full max-w-sm">

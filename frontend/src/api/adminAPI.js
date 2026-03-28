@@ -7,6 +7,7 @@ export const createUser = (data) => axiosInstance.post('/users/', data).then(r =
 export const updateUser = (id, data) => axiosInstance.patch(`/users/${id}/`, data).then(r => r.data)
 export const deleteUser = (id) => axiosInstance.delete(`/users/${id}/`).then(r => r.data)
 export const getManagers = () => axiosInstance.get('/users/managers/').then(r => r.data)
+export const getAgentsLiaison = () => axiosInstance.get('/users/agents_liaison/').then(r => r.data)
 
 // Departments
 export const getDepartments = () => axiosInstance.get('/departments/').then(r => r.data)

@@ -1,27 +1,27 @@
-import React, { useEffect, useState, useMemo } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
 import { useSelector } from 'react-redux'
-import { selectUser } from '../../store/authSlice.js'
-import { getDashboardData } from '../../api/dashboardAPI.js'
-import StatusBadge from '../../components/Common/StatusBadge.jsx'
-import LoadingSpinner from '../../components/Common/LoadingSpinner.jsx'
-import { formatDate, getFullName } from '../../utils/helpers.js'
+import { Link, useNavigate } from 'react-router-dom'
 import {
-  AreaChart,
   Area,
-  BarChart,
+  AreaChart,
   Bar,
-  XAxis,
-  YAxis,
+  BarChart,
   CartesianGrid,
-  Tooltip,
+  Cell,
   Legend,
   ResponsiveContainer,
-  Cell,
+  Tooltip,
+  XAxis,
+  YAxis,
 } from 'recharts'
+import { getDashboardData } from '../../api/dashboardAPI.js'
+import LoadingSpinner from '../../components/Common/LoadingSpinner.jsx'
+import StatusBadge from '../../components/Common/StatusBadge.jsx'
+import { selectUser } from '../../store/authSlice.js'
+import { formatDate, getFullName } from '../../utils/helpers.js'
 
 // ── Palette ────────────────────────────────────────────────────────────────
-const C_DEEP  = '#162C54'
+const C_DEEP  = '#162C54'  // Bleu foncé principal
 const C_MID   = '#3475BB'
 const C_LIGHT = '#37B6E9'
 const C_NIGHT = '#1A4278'
@@ -36,20 +36,35 @@ function monthLabel(ym) {
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────
-function StatCard({ label, value, sub, icon, accent }) {
+function StatCard({ label, value, sub, icon }) {
+  // Utiliser la couleur bleue foncée pour toutes les cartes
+  const cardColor = C_DEEP;
+  
   return (
-    <div className="card p-5 flex items-center gap-4">
+    <div 
+      className="card p-5 flex items-center gap-4 transition-all duration-200 hover:shadow-md"
+      style={{ 
+        borderLeft: `4px solid ${cardColor}`,
+        backgroundColor: '#FFFFFF'
+      }}
+    >
       <div
         className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl"
-        style={{ backgroundColor: `${accent}18`, color: accent }}
+        style={{ backgroundColor: `${cardColor}15`, color: cardColor }}
       >
         {icon}
       </div>
-      <div>
-        <p className="text-2xl font-bold text-gray-900">{value ?? '—'}</p>
-        <p className="text-sm text-gray-500 mt-0.5">{label}</p>
+      <div className="flex-1">
+        <p className="text-2xl font-bold" style={{ color: '#1F2937' }}>
+          {value ?? '—'}
+        </p>
+        <p className="text-sm font-medium mt-0.5" style={{ color: '#4B5563' }}>
+          {label}
+        </p>
         {sub != null && (
-          <p className="text-xs mt-0.5" style={{ color: accent }}>{sub}</p>
+          <p className="text-xs mt-1" style={{ color: cardColor, fontWeight: 500 }}>
+            {sub}
+          </p>
         )}
       </div>
     </div>
@@ -369,24 +384,25 @@ export default function Dashboard() {
   const pendingInterne = (ci.PENDING_MANAGER || 0) + (ci.PENDING_DAF || 0) + (ci.PENDING_DIRECTOR || 0)
   const pendingExterne = (ce.PENDING_MANAGER || 0) + (ce.PENDING_DIRECTOR || 0)
 
+  // Toutes les cartes utilisent maintenant la couleur bleue foncée C_DEEP
   const statsCards = {
     tous: [
-      { label: 'Total fiches',     value: total.combined,  sub: `${total.internes} int. · ${total.externes} ext.`, accent: C_DEEP,  icon: iconDoc },
-      { label: 'En attente',       value: pendingInterne + pendingExterne, accent: '#D97706', icon: iconClock },
-      { label: 'Approuvées',       value: (ci.APPROVED || 0) + (ce.APPROVED || 0), accent: '#16A34A', icon: iconCheck },
-      { label: 'Rejetées',         value: (ci.REJECTED || 0) + (ce.REJECTED || 0), accent: '#DC2626', icon: iconX },
+      { label: 'Total fiches',     value: total.combined,  sub: `${total.internes} int. · ${total.externes} ext.`, icon: iconDoc },
+      { label: 'En attente',       value: pendingInterne + pendingExterne, icon: iconClock },
+      { label: 'Approuvées',       value: (ci.APPROVED || 0) + (ce.APPROVED || 0), icon: iconCheck },
+      { label: 'Rejetées',         value: (ci.REJECTED || 0) + (ce.REJECTED || 0), icon: iconX },
     ],
     interne: [
-      { label: 'Fiches internes',  value: total.internes,  accent: C_DEEP,  icon: iconDoc },
-      { label: 'En attente',       value: pendingInterne,  accent: '#D97706', icon: iconClock },
-      { label: 'Approuvées',       value: ci.APPROVED || 0, accent: '#16A34A', icon: iconCheck },
-      { label: 'Rejetées',         value: ci.REJECTED || 0, accent: '#DC2626', icon: iconX },
+      { label: 'Fiches internes',  value: total.internes,  icon: iconDoc },
+      { label: 'En attente',       value: pendingInterne,  icon: iconClock },
+      { label: 'Approuvées',       value: ci.APPROVED || 0, icon: iconCheck },
+      { label: 'Rejetées',         value: ci.REJECTED || 0, icon: iconX },
     ],
     externe: [
-      { label: 'Fiches externes',  value: total.externes,  accent: C_MID,  icon: iconGlobe },
-      { label: 'En attente',       value: pendingExterne,  accent: '#D97706', icon: iconClock },
-      { label: 'Approuvées',       value: ce.APPROVED || 0, accent: '#16A34A', icon: iconCheck },
-      { label: 'Rejetées',         value: ce.REJECTED || 0, accent: '#DC2626', icon: iconX },
+      { label: 'Fiches externes',  value: total.externes,  icon: iconGlobe },
+      { label: 'En attente',       value: pendingExterne,  icon: iconClock },
+      { label: 'Approuvées',       value: ce.APPROVED || 0, icon: iconCheck },
+      { label: 'Rejetées',         value: ce.REJECTED || 0, icon: iconX },
     ],
   }
 

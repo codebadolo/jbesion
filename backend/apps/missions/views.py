@@ -54,6 +54,10 @@ class FicheMissionViewSet(viewsets.ModelViewSet):
         if dept_filter:
             qs = qs.filter(department=dept_filter)
 
+        fiche_ext_id = self.request.query_params.get("fiche_externe_id")
+        if fiche_ext_id:
+            qs = qs.filter(fiche_externe_id=fiche_ext_id)
+
         # Restriction par rôle
         if user.role in (Role.DIRECTOR, Role.DAF, Role.ADMIN) or user.is_staff or user.is_rh:
             return qs

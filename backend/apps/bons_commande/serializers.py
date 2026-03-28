@@ -76,6 +76,7 @@ class BonCommandeSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "numero",
+            "created_by",
             "created_at",
             "updated_at",
             "daf_approuve_par",

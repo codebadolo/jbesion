@@ -1,20 +1,22 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
+import { Link } from 'react-router-dom'
+import LoadingSpinner from '../../components/Common/LoadingSpinner.jsx'
+import StatusBadge from '../../components/Common/StatusBadge.jsx'
+import { selectUser } from '../../store/authSlice.js'
 import {
   fetchFiches,
+  selectFichesError,
   selectFichesInternes,
   selectFichesInternesCount,
   selectFichesLoading,
-  selectFichesError,
 } from '../../store/fichesSlice.js'
-import { selectUser } from '../../store/authSlice.js'
-import StatusBadge from '../../components/Common/StatusBadge.jsx'
-import LoadingSpinner from '../../components/Common/LoadingSpinner.jsx'
-import { formatDate } from '../../utils/helpers.js'
 import { STATUS_LABELS } from '../../utils/constants.js'
+import { formatDate } from '../../utils/helpers.js'
 
+const C_DEEP = '#162C54'  // Bleu foncé principal
 const C_BLUE = '#3475BB'
+const C_LIGHT = '#37B6E9'
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Tous les statuts' },
@@ -30,6 +32,41 @@ const STATUS_OPTIONS = [
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 
+// ── StatCard Component ─────────────────────────────────────────────────────
+function StatCard({ label, value, sub, icon }) {
+  const cardColor = C_DEEP
+  
+  return (
+    <div 
+      className="card p-5 flex items-center gap-4 transition-all duration-200 hover:shadow-md"
+      style={{ 
+        borderLeft: `4px solid ${cardColor}`,
+        backgroundColor: '#162C54'
+      }}
+    >
+      <div
+        className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl"
+        style={{ backgroundColor: `${cardColor}15`, color: cardColor }}
+      >
+        {icon}
+      </div>
+      <div className="flex-1">
+        <p className="text-2xl font-bold" style={{ color: '#1F2937' }}>
+          {value ?? '—'}
+        </p>
+        <p className="text-sm font-medium mt-0.5" style={{ color: '#4B5563' }}>
+          {label}
+        </p>
+        {sub != null && (
+          <p className="text-xs mt-1" style={{ color: cardColor, fontWeight: 500 }}>
+            {sub}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function SortIcon({ dir }) {
   if (!dir) return (
     <svg className="inline h-3 w-3 ml-1 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -37,11 +74,11 @@ function SortIcon({ dir }) {
     </svg>
   )
   return dir === 'asc' ? (
-    <svg className="inline h-3 w-3 ml-1 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+    <svg className="inline h-3 w-3 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} style={{ color: C_BLUE }}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
     </svg>
   ) : (
-    <svg className="inline h-3 w-3 ml-1 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+    <svg className="inline h-3 w-3 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} style={{ color: C_BLUE }}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
     </svg>
   )
@@ -83,7 +120,7 @@ function Pagination({ page, totalPages, total, pageSize, onPage, onPageSize }) {
           ) : (
             <button key={p} type="button" onClick={() => onPage(p)}
               className="px-2.5 py-1 rounded border transition-colors"
-              style={p === page ? { backgroundColor: '#162C54', color: '#fff', borderColor: '#162C54' } : { borderColor: '#e5e7eb' }}
+              style={p === page ? { backgroundColor: C_DEEP, color: '#fff', borderColor: C_DEEP } : { borderColor: '#e5e7eb' }}
             >{p}</button>
           )
         )}
@@ -95,6 +132,38 @@ function Pagination({ page, totalPages, total, pageSize, onPage, onPageSize }) {
     </div>
   )
 }
+
+// ── Icons ──────────────────────────────────────────────────────────────────
+const iconDoc = (
+  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round"
+      d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+  </svg>
+)
+
+const iconClock = (
+  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+  </svg>
+)
+
+const iconCheck = (
+  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+  </svg>
+)
+
+const iconX = (
+  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+  </svg>
+)
+
+const iconTrend = (
+  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+  </svg>
+)
 
 export default function FichesInternesList() {
   const dispatch = useDispatch()
@@ -112,6 +181,48 @@ export default function FichesInternesList() {
   const [pageSize, setPageSize] = useState(20)
   const [sortKey, setSortKey] = useState('created_at')
   const [sortDir, setSortDir] = useState('desc')
+
+  // Calcul des statistiques à partir des fiches
+  const stats = useMemo(() => {
+    const counts = {
+      total: total,
+      draft: 0,
+      pending: 0,
+      approved: 0,
+      rejected: 0,
+      inExecution: 0,
+      delivered: 0
+    }
+    
+    fiches.forEach(fiche => {
+      switch (fiche.status) {
+        case 'DRAFT':
+          counts.draft++
+          break
+        case 'PENDING_MANAGER':
+        case 'PENDING_DAF':
+        case 'PENDING_DIRECTOR':
+          counts.pending++
+          break
+        case 'APPROVED':
+          counts.approved++
+          break
+        case 'REJECTED':
+          counts.rejected++
+          break
+        case 'IN_EXECUTION':
+          counts.inExecution++
+          break
+        case 'DELIVERED':
+          counts.delivered++
+          break
+        default:
+          break
+      }
+    })
+    
+    return counts
+  }, [fiches, total])
 
   // Debounce search
   useEffect(() => {
@@ -161,6 +272,17 @@ export default function FichesInternesList() {
   const hasFilters = statusFilter || search
   const isEmpty = !isLoading && sorted.length === 0
 
+  // Cartes de statistiques
+  const statCards = [
+    { label: 'Total fiches', value: stats.total, icon: iconDoc },
+    { label: 'Brouillons', value: stats.draft, icon: iconDoc },
+    { label: 'En attente', value: stats.pending, icon: iconClock },
+    { label: 'Approuvées', value: stats.approved, icon: iconCheck },
+    { label: 'Rejetées', value: stats.rejected, icon: iconX },
+    { label: 'En exécution', value: stats.inExecution, icon: iconTrend },
+    { label: 'Livrées', value: stats.delivered, icon: iconCheck },
+  ]
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -178,6 +300,15 @@ export default function FichesInternesList() {
           Nouvelle fiche
         </Link>
       </div>
+
+      {/* ── Statistiques Cards ───────────────────────────────────────────── */}
+      {!isLoading && stats.total > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
+          {statCards.map((card) => (
+            <StatCard key={card.label} {...card} />
+          ))}
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="card overflow-hidden">
@@ -256,7 +387,7 @@ export default function FichesInternesList() {
               {hasFilters ? 'Aucun résultat pour ces filtres' : 'Aucune fiche interne trouvée'}
             </p>
             {!hasFilters && (
-              <Link to="/fiches-internes/create" className="mt-3 inline-block text-sm font-medium" style={{ color: '#37B6E9' }}>
+              <Link to="/fiches-internes/create" className="mt-3 inline-block text-sm font-medium" style={{ color: C_LIGHT }}>
                 Créer une fiche interne →
               </Link>
             )}
@@ -277,7 +408,7 @@ export default function FichesInternesList() {
                       </th>
                     ))}
                     <th className="table-header">Actions</th>
-                  </tr>
+                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50 bg-white">
                   {sorted.map((fiche) => {

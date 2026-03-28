@@ -178,6 +178,11 @@ class UserViewSet(viewsets.ModelViewSet):
         # Managers and agents_liaison endpoints are accessible to all authenticated users
         if self.action in ("managers", "agents_liaison"):
             return [IsAuthenticated()]
+        # DIRECTOR and DAF can read the user list (but not create/edit/delete)
+        if self.action in ("list", "retrieve") and getattr(self.request.user, "role", None) in (
+            Role.DIRECTOR, Role.DAF
+        ):
+            return [IsAuthenticated()]
         return super().get_permissions()
 
     # ------------------------------------------------------------------

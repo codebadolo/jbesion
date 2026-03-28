@@ -45,7 +45,7 @@ export const deleteBonCommande = createAsyncThunk(
 
 const makeWorkflowThunk = (name, apiFn) =>
   createAsyncThunk(`bonsCommande/${name}`, async (arg, { rejectWithValue }) => {
-    try { return await apiFn(arg.id ?? arg, arg.data) }
+    try { return await apiFn(arg) }
     catch (e) { return rejectWithValue(e.response?.data || 'Erreur serveur') }
   })
 
