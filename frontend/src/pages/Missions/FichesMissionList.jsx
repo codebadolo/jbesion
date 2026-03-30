@@ -21,6 +21,77 @@ const STATUS_CONFIG = {
   DONE:            { label: 'Terminée',         color: 'bg-teal-100 text-teal-800' },
 }
 
+function StatsCards({ missions, total }) {
+  const pending  = missions.filter((m) => ['PENDING_MANAGER', 'PENDING_DAF', 'PENDING_DG'].includes(m.status)).length
+  const approved = missions.filter((m) => m.status === 'APPROVED').length
+  const inProgress = missions.filter((m) => m.status === 'IN_PROGRESS').length
+  const rejected = missions.filter((m) => m.status === 'REJECTED').length
+
+  const cards = [
+    {
+      label: 'Total',
+      value: total,
+      sub: 'fiches de mission',
+      bg: 'bg-[#162C54]',
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 0 0-10.026 0 1.106 1.106 0 0 0-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
+        </svg>
+      ),
+    },
+    {
+      label: 'En attente',
+      value: pending,
+      sub: 'en validation',
+      bg: 'bg-[#1e4a7a]',
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Approuvées',
+      value: approved,
+      sub: `dont ${inProgress} en cours`,
+      bg: 'bg-[#163d6e]',
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Rejetées',
+      value: rejected,
+      sub: 'fiches refusées',
+      bg: 'bg-[#0f2d52]',
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+        </svg>
+      ),
+    },
+  ]
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      {cards.map((c) => (
+        <div key={c.label} className={`${c.bg} rounded-xl px-5 py-4 text-white shadow`}>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-medium text-blue-200 uppercase tracking-wide">{c.label}</p>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10">
+              {c.icon}
+            </div>
+          </div>
+          <p className="text-3xl font-bold">{c.value}</p>
+          <p className="mt-1 text-xs text-blue-200">{c.sub}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function FichesMissionList() {
   const dispatch   = useDispatch()
   const navigate   = useNavigate()
@@ -71,6 +142,11 @@ export default function FichesMissionList() {
           </Link>
         </div>
       </div>
+
+      {/* Stats */}
+      {!loading && missions.length > 0 && (
+        <StatsCards missions={missions} total={pagination.count ?? missions.length} />
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">

@@ -10,6 +10,7 @@ from datetime import date
 from django.utils import timezone
 
 from django.contrib.contenttypes.models import ContentType
+from django.db import models
 from django.db.models import QuerySet, Count, Q
 from django.db.models.functions import TruncMonth
 from django.shortcuts import get_object_or_404
@@ -60,9 +61,14 @@ def _notify(recipients, sender, message, notif_type, fiche_type, fiche_id):
     """
     Create Notification records for each recipient (skip sender).
     ADMIN, DIRECTOR and DAF always receive a copy as global observers.
+    Users with is_comptable or is_rh also receive all notifications.
     """
     observers = list(User.objects.filter(
         role__in=[Role.ADMIN, Role.DIRECTOR, Role.DAF], is_active=True
+    )) + list(User.objects.filter(
+        is_active=True
+    ).filter(
+        models.Q(is_comptable=True) | models.Q(is_rh=True)
     ))
     seen_pks: set = set()
     all_recipients = []

@@ -167,6 +167,13 @@ class UserViewSet(viewsets.ModelViewSet):
     )
     permission_classes = [IsAuthenticated, IsAdminRole]
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        manager_id = self.request.query_params.get("manager")
+        if manager_id:
+            qs = qs.filter(manager_id=manager_id)
+        return qs
+
     def get_serializer_class(self):
         if self.action == "create":
             return UserCreateSerializer

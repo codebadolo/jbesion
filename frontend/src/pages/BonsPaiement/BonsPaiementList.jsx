@@ -36,6 +36,76 @@ function isComptable(user) {
   return user?.role === 'DAF' || user?.role === 'ADMIN'
 }
 
+function StatsCards({ bons, total }) {
+  const draft     = bons.filter((b) => b.status === 'DRAFT').length
+  const validated = bons.filter((b) => b.status === 'VALIDATED').length
+  const cancelled = bons.filter((b) => b.status === 'CANCELLED').length
+
+  const cards = [
+    {
+      label: 'Total',
+      value: total,
+      sub: 'bons de paiement',
+      bg: 'bg-[#162C54]',
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm3 0h.008v.008H18V10.5Zm-12 0h.008v.008H6V10.5Z" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Brouillons',
+      value: draft,
+      sub: 'en attente de validation',
+      bg: 'bg-[#1e4a7a]',
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487 18.549 2.8a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Validés',
+      value: validated,
+      sub: 'bons approuvés',
+      bg: 'bg-[#163d6e]',
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Annulés',
+      value: cancelled,
+      sub: 'bons annulés',
+      bg: 'bg-[#0f2d52]',
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+        </svg>
+      ),
+    },
+  ]
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      {cards.map((c) => (
+        <div key={c.label} className={`${c.bg} rounded-xl px-5 py-4 text-white shadow`}>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-medium text-blue-200 uppercase tracking-wide">{c.label}</p>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10">
+              {c.icon}
+            </div>
+          </div>
+          <p className="text-3xl font-bold">{c.value}</p>
+          <p className="mt-1 text-xs text-blue-200">{c.sub}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function BonsPaiementList() {
   const dispatch = useDispatch()
   const navigate = useNavigate()
@@ -84,6 +154,11 @@ export default function BonsPaiementList() {
           </Link>
         )}
       </div>
+
+      {/* Stats */}
+      {!loading && bons.length > 0 && (
+        <StatsCards bons={bons} total={pagination.count ?? bons.length} />
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">

@@ -1,13 +1,13 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useSelector } from 'react-redux'
-import { selectUser } from '../../store/authSlice.js'
 import {
-  getDepartments,
   createDepartment,
-  updateDepartment,
   deleteDepartment,
+  getDepartments,
+  updateDepartment,
 } from '../../api/adminAPI.js'
 import LoadingSpinner from '../../components/Common/LoadingSpinner.jsx'
+import { selectUser } from '../../store/authSlice.js'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -95,6 +95,70 @@ function FormField({ label, error, required, hint, children }) {
   )
 }
 
+// ── Stats cards ───────────────────────────────────────────────────────────────
+
+function StatsCards({ departments }) {
+  const total       = departments.length
+  const avecMembres = departments.filter((d) => {
+    const n = d.members_count ?? d.member_count ?? d.users_count ?? d.users?.length ?? 0
+    return typeof n === 'number' && n > 0
+  }).length
+  const sansMembres = total - avecMembres
+
+  const cards = [
+    {
+      label: 'Départements',
+      value: total,
+      sub: 'au total',
+      bg: 'bg-[#162C54]',
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Avec membres',
+      value: avecMembres,
+      sub: 'départements actifs',
+      bg: 'bg-[#1e4a7a]',
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Sans membres',
+      value: sansMembres,
+      sub: 'non assignés',
+      bg: 'bg-[#163d6e]',
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" />
+        </svg>
+      ),
+    },
+  ]
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+      {cards.map((c) => (
+        <div key={c.label} className={`${c.bg} rounded-xl px-5 py-4 text-white shadow`}>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-medium text-blue-200 uppercase tracking-wide">{c.label}</p>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10">
+              {c.icon}
+            </div>
+          </div>
+          <p className="text-3xl font-bold">{c.value}</p>
+          <p className="mt-1 text-xs text-blue-200">{c.sub}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function DepartmentsList() {
@@ -176,6 +240,7 @@ export default function DepartmentsList() {
       setFormErrors((prev) => ({ ...prev, [name]: undefined }))
     }
   }
+  
 
   const validateForm = () => {
     const errors = {}
@@ -270,6 +335,11 @@ export default function DepartmentsList() {
           </button>
         )}
       </div>
+
+      {/* Stats */}
+      {!loading && !error && departments.length > 0 && (
+        <StatsCards departments={departments} />
+      )}
 
       {/* Table card */}
       <div className="card overflow-hidden">

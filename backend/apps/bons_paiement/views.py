@@ -12,6 +12,7 @@ Endpoints:
   POST   /api/bons-paiement/{id}/cancel/    → mark as CANCELLED
 """
 
+from django.db import models
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -25,10 +26,20 @@ from .serializers import BonPaiementSerializer, BonPaiementListSerializer
 
 
 def _bp_notify(bon, sender, notif_type, message):
-    """Notify ADMIN, DIRECTOR and DAF about a Bon de Paiement event."""
-    recipients = list(User.objects.filter(
+    """Notify ADMIN, DIRECTOR, DAF, comptables and RH about a Bon de Paiement event."""
+    all_users = list(User.objects.filter(
         role__in=[Role.ADMIN, Role.DIRECTOR, Role.DAF], is_active=True
+    )) + list(User.objects.filter(
+        is_active=True
+    ).filter(
+        models.Q(is_comptable=True) | models.Q(is_rh=True)
     ))
+    seen_pks: set = set()
+    recipients = []
+    for u in all_users:
+        if u.pk not in seen_pks:
+            seen_pks.add(u.pk)
+            recipients.append(u)
     for user in recipients:
         if user != sender:
             Notification.objects.create(
