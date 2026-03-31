@@ -82,7 +82,7 @@ class Command(BaseCommand):
             self._reset()
 
         # --- collect users by role ------------------------------------
-        employees = list(User.objects.filter(role=Role.EMPLOYEE))
+        employees = list(User.objects.filter(role=Role.COLLABORATEUR))
         managers  = list(User.objects.filter(role=Role.MANAGER))
         dafs      = list(User.objects.filter(role=Role.DAF))
         directors = list(User.objects.filter(role=Role.DIRECTOR))

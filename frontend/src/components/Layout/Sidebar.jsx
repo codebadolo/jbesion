@@ -38,6 +38,7 @@ const navItems = [
   {
     label: 'Bons de Paiement',
     to: '/bons-paiement',
+    hideForCollaborateur: true,
     icon: (
       <svg className="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round"
@@ -48,6 +49,7 @@ const navItems = [
   {
     label: 'Bons de Commande',
     to: '/bons-commande',
+    hideForCollaborateur: true,
     icon: (
       <svg className="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round"
@@ -58,6 +60,7 @@ const navItems = [
   {
     label: 'Missions',
     to: '/missions',
+    hideForCollaborateur: true,
     icon: (
       <svg className="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round"
@@ -154,6 +157,8 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) 
   const user = useSelector(selectUser)
   const unreadCount = useSelector(selectUnreadCount)
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'DIRECTOR'
+  const isCollaborateur = user?.role === 'COLLABORATEUR'
+  const visibleNavItems = navItems.filter(item => !(item.hideForCollaborateur && isCollaborateur))
 
   const sidebarContent = (
     <div className="flex h-full flex-col" style={{ backgroundColor: '#162C54' }}>
@@ -211,7 +216,7 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) 
         )}
         {collapsed && <div className="mb-2" />}
 
-        {navItems.map((item) => (
+        {visibleNavItems.map((item) => (
           <NavItem key={item.to} item={item} collapsed={collapsed} onClick={onClose} badge={item.notifBadge ? unreadCount : 0} />
         ))}
 

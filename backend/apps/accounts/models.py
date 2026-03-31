@@ -2,7 +2,7 @@
 Custom User model for the Gestion des Fiches de Besoins application.
 
 Extends Django's AbstractUser to add:
-  - role  : one of EMPLOYEE / MANAGER / DAF / DIRECTOR / ADMIN
+  - role  : one of COLLABORATEUR / MANAGER / DAF / DIRECTOR / ADMIN
   - department : FK to Department
   - manager : self-referential FK (optional)
   - phone / avatar : additional profile fields
@@ -15,7 +15,7 @@ from django.utils import timezone
 
 class Role(models.TextChoices):
     """All possible roles within the organisation."""
-    EMPLOYEE = "EMPLOYEE", "Collaborateur"
+    COLLABORATEUR = "COLLABORATEUR", "Collaborateur"
     MANAGER = "MANAGER", "Supérieur Hiérarchique"
     DAF = "DAF", "Directeur Administratif et Financier"
     DIRECTOR = "DIRECTOR", "DG"
@@ -37,7 +37,7 @@ class User(AbstractUser):
     role = models.CharField(
         max_length=20,
         choices=Role.choices,
-        default=Role.EMPLOYEE,
+        default=Role.COLLABORATEUR,
         verbose_name="Rôle",
     )
 
@@ -142,8 +142,8 @@ class User(AbstractUser):
     # ------------------------------------------------------------------
 
     @property
-    def is_employee(self) -> bool:
-        return self.role == Role.EMPLOYEE
+    def is_collaborateur(self) -> bool:
+        return self.role == Role.COLLABORATEUR
 
     @property
     def is_manager(self) -> bool:

@@ -10,7 +10,6 @@ from datetime import date
 from django.utils import timezone
 
 from django.contrib.contenttypes.models import ContentType
-from django.db import models
 from django.db.models import QuerySet, Count, Q
 from django.db.models.functions import TruncMonth
 from django.shortcuts import get_object_or_404
@@ -60,16 +59,15 @@ from .serializers import (
 def _notify(recipients, sender, message, notif_type, fiche_type, fiche_id):
     """
     Create Notification records for each recipient (skip sender).
-    ADMIN, DIRECTOR and DAF always receive a copy as global observers.
-    Users with is_comptable or is_rh also receive all notifications.
+    Global observers (ADMIN, DIRECTOR, DAF, comptables, RH) always receive a copy.
     """
-    observers = list(User.objects.filter(
-        role__in=[Role.ADMIN, Role.DIRECTOR, Role.DAF], is_active=True
-    )) + list(User.objects.filter(
-        is_active=True
-    ).filter(
-        models.Q(is_comptable=True) | models.Q(is_rh=True)
-    ))
+    observers = list(
+        User.objects.filter(is_active=True).filter(
+            Q(role__in=[Role.ADMIN, Role.DIRECTOR, Role.DAF])
+            | Q(is_comptable=True)
+            | Q(is_rh=True)
+        )
+    )
     seen_pks: set = set()
     all_recipients = []
     for u in list(recipients) + observers:
@@ -191,7 +189,7 @@ class FicheInterneViewSet(viewsets.ModelViewSet):
     ViewSet for FicheInterne resources.
 
     Queryset filtering by role:
-      EMPLOYEE  → only own fiches
+      COLLABORATEUR  → only own fiches
       MANAGER   → own fiches + subordinates' fiches
       DAF       → all fiches
       DIRECTOR  → all fiches
@@ -1062,7 +1060,11 @@ class NotificationViewSet(viewsets.ViewSet):
 
     @action(detail=True, methods=["post"], url_path="mark_read")
     def mark_read(self, request: Request, pk=None) -> Response:
-        notif = get_object_or_404(Notification, pk=pk, recipient=request.user)
+        user = request.user
+        if user.role in (Role.ADMIN, Role.DIRECTOR):
+            notif = get_object_or_404(Notification, pk=pk)
+        else:
+            notif = get_object_or_404(Notification, pk=pk, recipient=user)
         notif.is_read = True
         notif.save(update_fields=["is_read"])
         return Response({"detail": "Notification marquée comme lue."})
@@ -1091,7 +1093,7 @@ class DashboardView(APIView):
         # ------------------------------------------------------------------
         # Build base querysets filtered by role (same logic as viewsets)
         # ------------------------------------------------------------------
-        if user.role == Role.EMPLOYEE:
+        if user.role == Role.COLLABORATEUR:
             fi_qs = FicheInterne.objects.filter(created_by=user)
             fe_qs = FicheExterne.objects.filter(created_by=user)
         elif user.role == Role.MANAGER:

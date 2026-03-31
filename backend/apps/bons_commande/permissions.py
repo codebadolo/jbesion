@@ -36,10 +36,12 @@ class CanManageBonCommande(BasePermission):
       - DAF peut valider proformas, approuver/rejeter côté DAF.
       - Comptable/DAF/ADMIN peuvent soumettre, exécuter, clôturer, gérer les proformas.
     """
-    message = "Seule la comptabilité ou le DAF peut gérer les bons de commande."
+    message = "Vous n'avez pas accès aux bons de commande."
 
     def has_permission(self, request, view) -> bool:
         if not request.user or not request.user.is_authenticated:
+            return False
+        if request.user.role == Role.COLLABORATEUR:
             return False
         if request.method in SAFE_METHODS:
             return True
@@ -49,6 +51,8 @@ class CanManageBonCommande(BasePermission):
         return self._can_write(request.user)
 
     def has_object_permission(self, request, view, obj) -> bool:
+        if request.user.role == Role.COLLABORATEUR:
+            return False
         if request.method in SAFE_METHODS:
             return True
         if getattr(view, "action", None) in _ALL_WORKFLOW_ACTIONS:

@@ -107,7 +107,7 @@ class Command(BaseCommand):
         daf      = User.objects.filter(role=Role.DAF).first()
         director = User.objects.filter(role=Role.DIRECTOR).first()
         managers = list(User.objects.filter(role=Role.MANAGER))
-        employees = list(User.objects.filter(role=Role.EMPLOYEE, is_active=True))
+        employees = list(User.objects.filter(role=Role.COLLABORATEUR, is_active=True))
 
         if not (daf and director and managers and employees):
             self.stderr.write(self.style.ERROR(

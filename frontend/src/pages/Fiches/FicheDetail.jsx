@@ -301,7 +301,7 @@ const bpCanManage = (u) =>
 const EMPTY_BP = { beneficiaire: '', motif: '', mode_paiement: '', date: '', montant: '', montant_lettres: '', items: [{ designation: '', montant: '' }] }
 const MODE_LABELS = { ESPECE: 'Espèces', CHEQUE: 'Chèque' }
 
-function BonsPaiementSection({ ficheType, ficheId, user }) {
+function BonsPaiementSection({ ficheType, ficheId, user, fiche }) {
   const [bons,       setBons]       = useState([])
   const [loading,    setLoading]    = useState(true)
   const [actLoading, setActLoading] = useState({})
@@ -381,7 +381,27 @@ function BonsPaiementSection({ ficheType, ficheId, user }) {
         </div>
         {canManage && (
           <button type="button"
-            onClick={() => { setShowModal(true); setNewBpData(EMPTY_BP); setCreateErr(null) }}
+            onClick={() => {
+              const d = fiche || {}
+              const createdBy = d.created_by_detail
+              const beneficiaire = createdBy
+                ? `${createdBy.first_name || ''} ${createdBy.last_name || ''}`.trim()
+                : ''
+              const motif = d.numero
+                ? `Paiement relatif à la fiche ${d.numero}`
+                : ''
+              const ficheItems = (d.items || [])
+                .filter((it) => it.designation || it.description)
+                .map((it) => ({
+                  designation: it.designation || it.description || '',
+                  montant: String(it.montant_prestataire || it.montant || ''),
+                }))
+              const prefillItems = ficheItems.length > 0 ? ficheItems : [{ designation: '', montant: '' }]
+              const today = new Date().toISOString().slice(0, 10)
+              setNewBpData({ ...EMPTY_BP, beneficiaire, motif, date: today, items: prefillItems })
+              setShowModal(true)
+              setCreateErr(null)
+            }}
             className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border bg-white border-gray-300 text-gray-700 hover:bg-purple-50 hover:border-purple-300 transition-colors"
           >
             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
@@ -2228,6 +2248,7 @@ export default function FicheDetail({ type }) {
             ficheType={ficheType}
             ficheId={Number(id)}
             user={user}
+            fiche={fiche}
           />
 
           {/* ── Missions liées (fiche externe uniquement) ─────────── */}

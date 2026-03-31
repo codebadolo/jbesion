@@ -35,38 +35,22 @@ function monthLabel(ym) {
   return `${names[parseInt(m, 10) - 1]} ${String(y).slice(2)}`
 }
 
+const CARD_BG_COLORS = ['bg-[#1e3a5f]', 'bg-[#1e4a7a]', 'bg-[#163d6e]', 'bg-[#0f2d52]']
+
 // ── Sub-components ─────────────────────────────────────────────────────────
-function StatCard({ label, value, sub, icon }) {
-  // Utiliser la couleur bleue foncée pour toutes les cartes
-  const cardColor = C_DEEP;
-  
+function StatCard({ label, value, sub, icon, bgColor }) {
   return (
-    <div 
-      className="card p-5 flex items-center gap-4 transition-all duration-200 hover:shadow-md"
-      style={{ 
-        borderLeft: `4px solid ${cardColor}`,
-        backgroundColor: '#FFFFFF'
-      }}
-    >
-      <div
-        className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl"
-        style={{ backgroundColor: `${cardColor}15`, color: cardColor }}
-      >
-        {icon}
+    <div className={`${bgColor || CARD_BG_COLORS[0]} rounded-xl px-5 py-4 text-white shadow transition-all duration-200 hover:shadow-lg`}>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm font-medium text-blue-200">{label}</p>
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10">
+          {icon}
+        </div>
       </div>
-      <div className="flex-1">
-        <p className="text-2xl font-bold" style={{ color: '#1F2937' }}>
-          {value ?? '—'}
-        </p>
-        <p className="text-sm font-medium mt-0.5" style={{ color: '#4B5563' }}>
-          {label}
-        </p>
-        {sub != null && (
-          <p className="text-xs mt-1" style={{ color: cardColor, fontWeight: 500 }}>
-            {sub}
-          </p>
-        )}
-      </div>
+      <p className="text-3xl font-bold">{value ?? '—'}</p>
+      {sub != null && (
+        <p className="mt-1 text-xs text-blue-300">{sub}</p>
+      )}
     </div>
   )
 }
@@ -384,25 +368,34 @@ export default function Dashboard() {
   const pendingInterne = (ci.PENDING_MANAGER || 0) + (ci.PENDING_DAF || 0) + (ci.PENDING_DIRECTOR || 0)
   const pendingExterne = (ce.PENDING_MANAGER || 0) + (ce.PENDING_DIRECTOR || 0)
 
-  // Toutes les cartes utilisent maintenant la couleur bleue foncée C_DEEP
+  const isEmployee = userRole === 'COLLABORATEUR'
+
+  // Labels personnalisés selon le rôle
+  const totalLabel    = isEmployee ? 'Mes fiches'          : 'Total fiches'
+  const interneLabel  = isEmployee ? 'Mes fiches internes' : 'Fiches internes'
+  const externeLabel  = isEmployee ? 'Mes fiches externes' : 'Fiches externes'
+  const pendingLabel  = isEmployee ? 'En attente'          : 'En attente'
+  const approvedLabel = isEmployee ? 'Mes approuvées'      : 'Approuvées'
+  const rejectedLabel = isEmployee ? 'Mes rejetées'        : 'Rejetées'
+
   const statsCards = {
     tous: [
-      { label: 'Total fiches',     value: total.combined,  sub: `${total.internes} int. · ${total.externes} ext.`, icon: iconDoc },
-      { label: 'En attente',       value: pendingInterne + pendingExterne, icon: iconClock },
-      { label: 'Approuvées',       value: (ci.APPROVED || 0) + (ce.APPROVED || 0), icon: iconCheck },
-      { label: 'Rejetées',         value: (ci.REJECTED || 0) + (ce.REJECTED || 0), icon: iconX },
+      { label: totalLabel,    value: total.combined,  sub: `${total.internes} int. · ${total.externes} ext.`, icon: iconDoc,   bgColor: CARD_BG_COLORS[0] },
+      { label: pendingLabel,  value: pendingInterne + pendingExterne, icon: iconClock,  bgColor: CARD_BG_COLORS[1] },
+      { label: approvedLabel, value: (ci.APPROVED || 0) + (ce.APPROVED || 0), icon: iconCheck, bgColor: CARD_BG_COLORS[2] },
+      { label: rejectedLabel, value: (ci.REJECTED || 0) + (ce.REJECTED || 0), icon: iconX,     bgColor: CARD_BG_COLORS[3] },
     ],
     interne: [
-      { label: 'Fiches internes',  value: total.internes,  icon: iconDoc },
-      { label: 'En attente',       value: pendingInterne,  icon: iconClock },
-      { label: 'Approuvées',       value: ci.APPROVED || 0, icon: iconCheck },
-      { label: 'Rejetées',         value: ci.REJECTED || 0, icon: iconX },
+      { label: interneLabel,  value: total.internes,  icon: iconDoc,   bgColor: CARD_BG_COLORS[0] },
+      { label: pendingLabel,  value: pendingInterne,  icon: iconClock, bgColor: CARD_BG_COLORS[1] },
+      { label: approvedLabel, value: ci.APPROVED || 0, icon: iconCheck, bgColor: CARD_BG_COLORS[2] },
+      { label: rejectedLabel, value: ci.REJECTED || 0, icon: iconX,     bgColor: CARD_BG_COLORS[3] },
     ],
     externe: [
-      { label: 'Fiches externes',  value: total.externes,  icon: iconGlobe },
-      { label: 'En attente',       value: pendingExterne,  icon: iconClock },
-      { label: 'Approuvées',       value: ce.APPROVED || 0, icon: iconCheck },
-      { label: 'Rejetées',         value: ce.REJECTED || 0, icon: iconX },
+      { label: externeLabel,  value: total.externes,  icon: iconGlobe,  bgColor: CARD_BG_COLORS[0] },
+      { label: pendingLabel,  value: pendingExterne,  icon: iconClock,  bgColor: CARD_BG_COLORS[1] },
+      { label: approvedLabel, value: ce.APPROVED || 0, icon: iconCheck, bgColor: CARD_BG_COLORS[2] },
+      { label: rejectedLabel, value: ce.REJECTED || 0, icon: iconX,     bgColor: CARD_BG_COLORS[3] },
     ],
   }
 
@@ -436,6 +429,7 @@ export default function Dashboard() {
   const BAR_COLORS = [C_MID, '#64B5F6', '#FFA726', '#FB8C00', '#43A047', '#E53935']
 
   const canSeePending = ['MANAGER', 'DAF', 'DIRECTOR', 'ADMIN'].includes(userRole)
+  const canSeeCharts  = !isEmployee
 
   return (
     <div className="space-y-6">
@@ -447,7 +441,9 @@ export default function Dashboard() {
             Bonjour, {user?.first_name || getFullName(user)} 👋
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Aperçu de l'activité — vue en temps réel
+            {isEmployee
+              ? 'Aperçu de vos activités personnelles'
+              : 'Aperçu de l\'activité — vue en temps réel'}
           </p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
@@ -474,8 +470,8 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* ── Charts row ───────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
+      {/* ── Charts row (masqué pour les collaborateurs) ───────────────────── */}
+      {canSeeCharts && <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
 
         {/* Area chart — monthly trend */}
         <div className="card xl:col-span-3 p-5">
@@ -558,7 +554,7 @@ export default function Dashboard() {
             )}
           </ResponsiveContainer>
         </div>
-      </div>
+      </div>}
 
       {/* ── Bottom row: recent + pending ─────────────────────────────────── */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">

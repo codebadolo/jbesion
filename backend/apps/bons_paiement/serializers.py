@@ -26,6 +26,8 @@ class BonPaiementSerializer(serializers.ModelSerializer):
             "montant",
             "montant_lettres",
             "notes",
+            "fiche_type",
+            "fiche_id",
             "status",
             "items",
             "created_by",

@@ -12,7 +12,7 @@ export const STATUS_LABELS = {
 }
 
 export const ROLE_LABELS = {
-  EMPLOYEE: 'Collaborateur',
+  COLLABORATEUR: 'Collaborateur',
   MANAGER: 'Supérieur Hiérarchique',
   DAF: 'DAF',
   DIRECTOR: 'DG',

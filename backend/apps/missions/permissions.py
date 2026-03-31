@@ -11,10 +11,12 @@ from apps.accounts.models import Role
 
 
 class CanManageMission(BasePermission):
-    """Tout utilisateur authentifié peut lire et créer. Seuls les valideurs peuvent valider."""
+    """Tout utilisateur authentifié sauf COLLABORATEUR peut accéder aux missions."""
 
     def has_permission(self, request, view) -> bool:
-        return bool(request.user and request.user.is_authenticated)
+        if not request.user or not request.user.is_authenticated:
+            return False
+        return request.user.role != Role.COLLABORATEUR
 
     def has_object_permission(self, request, view, obj) -> bool:
         if request.method in SAFE_METHODS:

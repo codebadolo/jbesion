@@ -17,16 +17,20 @@ class CanManageBonPaiement(BasePermission):
     Write access (create / update / delete): DAF, ADMIN, or AF-department members.
     """
 
-    message = "Seule la comptabilité peut gérer les bons de paiement."
+    message = "Vous n'avez pas accès aux bons de paiement."
 
     def has_permission(self, request, view) -> bool:
         if not request.user or not request.user.is_authenticated:
+            return False
+        if request.user.role == Role.COLLABORATEUR:
             return False
         if request.method in SAFE_METHODS:
             return True
         return self._is_comptable(request.user)
 
     def has_object_permission(self, request, view, obj) -> bool:
+        if request.user.role == Role.COLLABORATEUR:
+            return False
         if request.method in SAFE_METHODS:
             return True
         return self._is_comptable(request.user)

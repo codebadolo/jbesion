@@ -104,7 +104,7 @@ class Command(BaseCommand):
             )
 
         # Récupérer utilisateurs et départements
-        employees = list(User.objects.filter(role__in=[Role.EMPLOYEE, Role.MANAGER]))
+        employees = list(User.objects.filter(role__in=[Role.COLLABORATEUR, Role.MANAGER]))
         managers = list(User.objects.filter(role=Role.MANAGER))
         creators = list(User.objects.filter(role__in=[Role.ADMIN, Role.DAF, Role.MANAGER]))
         agents_liaison = list(User.objects.filter(is_agent_liaison=True))

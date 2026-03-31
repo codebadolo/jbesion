@@ -15,7 +15,7 @@ import LoadingSpinner from '../../components/Common/LoadingSpinner.jsx'
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const ROLES = [
-  { value: 'EMPLOYEE', label: 'Collaborateur' },
+  { value: 'COLLABORATEUR', label: 'Collaborateur' },
   { value: 'MANAGER', label: 'Supérieur Hiérarchique' },
   { value: 'DAF', label: 'DAF' },
   { value: 'DIRECTOR', label: 'DG' },
@@ -43,7 +43,7 @@ const EMPTY_FORM = {
   last_name: '',
   username: '',
   email: '',
-  role: 'EMPLOYEE',
+  role: 'COLLABORATEUR',
   department: '',
   manager: '',
   password: '',
@@ -143,7 +143,7 @@ function StatsCards({ users }) {
   const directors  = users.filter((u) => u.role === 'DIRECTOR').length
   const dafs       = users.filter((u) => u.role === 'DAF').length
   const managers   = users.filter((u) => u.role === 'MANAGER').length
-  const employees  = users.filter((u) => u.role === 'EMPLOYEE').length
+  const employees  = users.filter((u) => u.role === 'COLLABORATEUR').length
   const agents     = users.filter((u) => u.is_agent_liaison).length
 
   const cards = [
@@ -292,7 +292,7 @@ export default function UsersList() {
       last_name: user.last_name || '',
       username: user.username || '',
       email: user.email || '',
-      role: user.role || 'EMPLOYEE',
+      role: user.role || 'COLLABORATEUR',
       department: user.department?.id?.toString() || user.department?.toString() || '',
       manager: user.manager?.id?.toString() || user.manager?.toString() || '',
       password: '',

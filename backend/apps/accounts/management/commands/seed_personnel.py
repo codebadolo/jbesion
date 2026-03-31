@@ -67,7 +67,7 @@ PERSONNEL_DATA = [
         "Comptable",
         "Admin & Finance",
         "finance@jofedigital.com",
-        Role.EMPLOYEE,
+        Role.COLLABORATEUR,
         False,
     ),
     (
@@ -75,7 +75,7 @@ PERSONNEL_DATA = [
         "Assistante Ressources Humaines",
         "Admin & Finance",
         "rh@jofedigital.com",
-        Role.EMPLOYEE,
+        Role.COLLABORATEUR,
         False,
     ),
     (
@@ -83,7 +83,7 @@ PERSONNEL_DATA = [
         "Secrétaire Comptable",
         "Admin & Finance",
         "asandwidi@jofedigital.com",
-        Role.EMPLOYEE,
+        Role.COLLABORATEUR,
         False,
     ),
     (
@@ -91,7 +91,7 @@ PERSONNEL_DATA = [
         "Assistante Comptable",
         "Admin & Finance",
         "assistantcomptable@jofedigital.bf",
-        Role.EMPLOYEE,
+        Role.COLLABORATEUR,
         False,
     ),
     (
@@ -99,7 +99,7 @@ PERSONNEL_DATA = [
         "Agent de liaison",
         "Admin & Finance",
         None,
-        Role.EMPLOYEE,
+        Role.COLLABORATEUR,
         False,
     ),
     (
@@ -107,7 +107,7 @@ PERSONNEL_DATA = [
         "Agent de liaison",
         "Admin & Finance",
         None,
-        Role.EMPLOYEE,
+        Role.COLLABORATEUR,
         False,
     ),
 
@@ -125,7 +125,7 @@ PERSONNEL_DATA = [
         "Business Developer Junior",
         "Commercial",
         "ftapsoba@jofedigital.com",
-        Role.EMPLOYEE,
+        Role.COLLABORATEUR,
         False,
     ),
 
@@ -143,7 +143,7 @@ PERSONNEL_DATA = [
         "Community Manager",
         "Marketing",
         "faridatou.barry@jofedigital.com",
-        Role.EMPLOYEE,
+        Role.COLLABORATEUR,
         False,
     ),
     (
@@ -151,7 +151,7 @@ PERSONNEL_DATA = [
         "Cheffe de pub & Responsable E-réputation",
         "Marketing",
         None,
-        Role.EMPLOYEE,
+        Role.COLLABORATEUR,
         False,
     ),
     (
@@ -159,7 +159,7 @@ PERSONNEL_DATA = [
         "Coordonnateur de production",
         "Marketing",
         "genos@jofedigital.com",
-        Role.EMPLOYEE,
+        Role.COLLABORATEUR,
         False,
     ),
     (
@@ -167,7 +167,7 @@ PERSONNEL_DATA = [
         "Analyste / Media Planner",
         "Marketing",
         "linda.kabore@jofedigital.com",
-        Role.EMPLOYEE,
+        Role.COLLABORATEUR,
         False,
     ),
     (
@@ -175,7 +175,7 @@ PERSONNEL_DATA = [
         "Business Developer",
         "Marketing",
         "kvanessa@jofedigital.com",
-        Role.EMPLOYEE,
+        Role.COLLABORATEUR,
         False,
     ),
     (
@@ -183,7 +183,7 @@ PERSONNEL_DATA = [
         "Copywriter",
         "Marketing",
         "nwebou@jofedigital.com",
-        Role.EMPLOYEE,
+        Role.COLLABORATEUR,
         False,
     ),
     (
@@ -191,7 +191,7 @@ PERSONNEL_DATA = [
         "Graphiste Designer",
         "Marketing",
         "graphic.designer1@jofedigital.com",
-        Role.EMPLOYEE,
+        Role.COLLABORATEUR,
         False,
     ),
     (
@@ -199,7 +199,7 @@ PERSONNEL_DATA = [
         "Graphiste Designer",
         "Marketing",
         "graphic.designer2@jofedigital.com",
-        Role.EMPLOYEE,
+        Role.COLLABORATEUR,
         False,
     ),
     (
@@ -207,7 +207,7 @@ PERSONNEL_DATA = [
         "Graphiste Designer",
         "Marketing",
         "graphic.designer3@jofedigital.com",
-        Role.EMPLOYEE,
+        Role.COLLABORATEUR,
         False,
     ),
     (
@@ -215,7 +215,7 @@ PERSONNEL_DATA = [
         "Superviseur Graphiste Designer",
         "Marketing",
         "graphic.supervisor@jofedigital.com",
-        Role.EMPLOYEE,
+        Role.COLLABORATEUR,
         False,
     ),
     (
@@ -223,7 +223,7 @@ PERSONNEL_DATA = [
         "Webmaster",
         "Marketing",
         "florita.kabore@jofedigital.com",
-        Role.EMPLOYEE,
+        Role.COLLABORATEUR,
         False,
     ),
     (
@@ -231,7 +231,7 @@ PERSONNEL_DATA = [
         "Photographe / Vidéaste",
         "Marketing",
         "pvjofe@gmail.com",
-        Role.EMPLOYEE,
+        Role.COLLABORATEUR,
         False,
     ),
     (
@@ -239,7 +239,7 @@ PERSONNEL_DATA = [
         "Cheffe de pub Junior",
         "Marketing",
         None,
-        Role.EMPLOYEE,
+        Role.COLLABORATEUR,
         False,
     ),
     (
@@ -247,7 +247,7 @@ PERSONNEL_DATA = [
         "Graphiste Designer Junior",
         "Marketing",
         "graphic.junior@jofedigital.com",
-        Role.EMPLOYEE,
+        Role.COLLABORATEUR,
         False,
     ),
     (
@@ -255,7 +255,7 @@ PERSONNEL_DATA = [
         "Photographe / Vidéaste",
         "Marketing",
         None,
-        Role.EMPLOYEE,
+        Role.COLLABORATEUR,
         False,
     ),
 

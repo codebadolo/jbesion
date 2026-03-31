@@ -12,6 +12,7 @@ Endpoints:
   POST   /api/bons-paiement/{id}/cancel/    → mark as CANCELLED
 """
 
+from django.db.models import Q
 from django.db import models
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action

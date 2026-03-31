@@ -112,7 +112,7 @@ class Command(BaseCommand):
 
         # ── Récupération des utilisateurs ─────────────────────────────────
         all_employees = list(User.objects.filter(
-            role__in=[Role.EMPLOYEE, Role.MANAGER], is_active=True
+            role__in=[Role.COLLABORATEUR, Role.MANAGER], is_active=True
         ))
         agents_liaison = list(User.objects.filter(is_agent_liaison=True, is_active=True))
         creators = list(User.objects.filter(
