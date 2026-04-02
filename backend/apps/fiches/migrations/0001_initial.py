@@ -135,7 +135,7 @@ class Migration(migrations.Migration):
                         decimal_places=2,
                         max_digits=14,
                         null=True,
-                        verbose_name="Montant estimé (DZD)",
+                        verbose_name="Montant estimé (FCFA)",
                     ),
                 ),
                 (
@@ -274,7 +274,7 @@ class Migration(migrations.Migration):
                         decimal_places=2,
                         max_digits=14,
                         null=True,
-                        verbose_name="Montant Prestataire (DZD)",
+                        verbose_name="Montant Prestataire (FCFA)",
                     ),
                 ),
                 (
@@ -284,7 +284,7 @@ class Migration(migrations.Migration):
                         decimal_places=2,
                         max_digits=14,
                         null=True,
-                        verbose_name="Montant Client (DZD)",
+                        verbose_name="Montant Client (FCFA)",
                     ),
                 ),
                 (

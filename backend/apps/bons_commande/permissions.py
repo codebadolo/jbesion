@@ -41,7 +41,7 @@ class CanManageBonCommande(BasePermission):
     def has_permission(self, request, view) -> bool:
         if not request.user or not request.user.is_authenticated:
             return False
-        if request.user.role == Role.COLLABORATEUR:
+        if request.user.role == Role.COLLABORATEUR and not self._can_write(request.user):
             return False
         if request.method in SAFE_METHODS:
             return True
@@ -51,7 +51,7 @@ class CanManageBonCommande(BasePermission):
         return self._can_write(request.user)
 
     def has_object_permission(self, request, view, obj) -> bool:
-        if request.user.role == Role.COLLABORATEUR:
+        if request.user.role == Role.COLLABORATEUR and not self._can_write(request.user):
             return False
         if request.method in SAFE_METHODS:
             return True

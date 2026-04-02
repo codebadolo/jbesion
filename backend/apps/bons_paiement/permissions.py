@@ -22,14 +22,14 @@ class CanManageBonPaiement(BasePermission):
     def has_permission(self, request, view) -> bool:
         if not request.user or not request.user.is_authenticated:
             return False
-        if request.user.role == Role.COLLABORATEUR:
+        if request.user.role == Role.COLLABORATEUR and not self._is_comptable(request.user):
             return False
         if request.method in SAFE_METHODS:
             return True
         return self._is_comptable(request.user)
 
     def has_object_permission(self, request, view, obj) -> bool:
-        if request.user.role == Role.COLLABORATEUR:
+        if request.user.role == Role.COLLABORATEUR and not self._is_comptable(request.user):
             return False
         if request.method in SAFE_METHODS:
             return True
@@ -40,5 +40,7 @@ class CanManageBonPaiement(BasePermission):
         if user.role in (Role.DAF, Role.ADMIN) or user.is_staff:
             return True
         if user.department and user.department.code == "AF":
+            return True
+        if user.is_comptable:
             return True
         return False

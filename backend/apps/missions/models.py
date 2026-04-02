@@ -6,6 +6,8 @@ Deux modèles principaux :
   - AbsenceAgent   : absence déclarée par un agent de liaison (en déplacement, formation…)
 """
 
+import datetime
+
 from django.conf import settings
 from django.db import models
 
@@ -56,7 +58,7 @@ class FicheMission(models.Model):
         blank=True,
         verbose_name="Numéro de fiche",
     )
-    date = models.DateField(verbose_name="Date de la fiche")
+    date = models.DateField(default=datetime.date.today, verbose_name="Date de la fiche")
 
     # ── Personne en mission ──────────────────────────────────────────
     beneficiaire = models.ForeignKey(

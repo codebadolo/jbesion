@@ -91,6 +91,7 @@ class FicheInterneSerializer(serializers.ModelSerializer):
         model = FicheInterne
         fields = [
             "id",
+            "reference",
             "created_by",
             "created_by_detail",
             "department",
@@ -118,6 +119,7 @@ class FicheInterneSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
+            "reference",
             "created_by",
             "date_creation",
             "status",
@@ -166,6 +168,7 @@ class FicheInterneListSerializer(serializers.ModelSerializer):
         model = FicheInterne
         fields = [
             "id",
+            "reference",
             "created_by",
             "created_by_name",
             "department",
@@ -220,6 +223,7 @@ class FicheExterneSerializer(serializers.ModelSerializer):
         model = FicheExterne
         fields = [
             "id",
+            "reference",
             "created_by",
             "created_by_detail",
             "department",
@@ -247,6 +251,7 @@ class FicheExterneSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
+            "reference",
             "created_by",
             "date_creation",
             "status",
@@ -293,6 +298,7 @@ class FicheExterneListSerializer(serializers.ModelSerializer):
         model = FicheExterne
         fields = [
             "id",
+            "reference",
             "created_by",
             "created_by_name",
             "department",

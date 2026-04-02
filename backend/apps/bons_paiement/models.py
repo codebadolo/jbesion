@@ -6,6 +6,8 @@ Two models:
   - BonPaiementItem : line items (détails) for each voucher
 """
 
+import datetime
+
 from django.conf import settings
 from django.db import models
 
@@ -32,7 +34,7 @@ class BonPaiement(models.Model):
         blank=True,
         verbose_name="Numéro de bon",
     )
-    date = models.DateField(verbose_name="Date")
+    date = models.DateField(default=datetime.date.today, verbose_name="Date")
     beneficiaire = models.CharField(
         max_length=255,
         verbose_name="Bénéficiaire (Reçu par)",
@@ -91,6 +93,13 @@ class BonPaiement(models.Model):
         verbose_name = "Bon de Paiement"
         verbose_name_plural = "Bons de Paiement"
         ordering = ["-created_at"]
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if not self.numero:
+            year = datetime.date.today().year
+            self.numero = f"BP-{year}-{self.pk:05d}"
+            BonPaiement.objects.filter(pk=self.pk).update(numero=self.numero)
 
     def __str__(self) -> str:
         return f"{self.numero} — {self.beneficiaire} — {self.montant} FCFA"

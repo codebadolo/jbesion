@@ -8,6 +8,8 @@ Three main models:
                     linked to either type via GenericForeignKey
 """
 
+import datetime
+
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
@@ -68,6 +70,12 @@ class FicheInterne(models.Model):
                → APPROVED / REJECTED
     """
 
+    reference = models.CharField(
+        max_length=20,
+        unique=True,
+        blank=True,
+        verbose_name="Référence",
+    )
     created_by = models.ForeignKey(
         User,
         on_delete=models.PROTECT,
@@ -121,8 +129,15 @@ class FicheInterne(models.Model):
         verbose_name_plural = "Fiches Internes"
         ordering = ["-created_at"]
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if not self.reference:
+            year = datetime.date.today().year
+            self.reference = f"FI-{year}-{self.pk:05d}"
+            FicheInterne.objects.filter(pk=self.pk).update(reference=self.reference)
+
     def __str__(self) -> str:
-        return f"FI-{self.pk:05d} | {self.department} | {self.get_status_display()}"
+        return f"{self.reference or f'FI-{self.pk:05d}'} | {self.department} | {self.get_status_display()}"
 
 
 class FicheInterneItem(models.Model):
@@ -150,7 +165,7 @@ class FicheInterneItem(models.Model):
         decimal_places=2,
         null=True,
         blank=True,
-        verbose_name="Montant estimé (DZD)",
+        verbose_name="Montant estimé (FCFA)",
     )
 
     class Meta:
@@ -173,6 +188,12 @@ class FicheExterne(models.Model):
                → APPROVED / REJECTED  (no DAF step)
     """
 
+    reference = models.CharField(
+        max_length=20,
+        unique=True,
+        blank=True,
+        verbose_name="Référence",
+    )
     created_by = models.ForeignKey(
         User,
         on_delete=models.PROTECT,
@@ -226,8 +247,15 @@ class FicheExterne(models.Model):
         verbose_name_plural = "Fiches Externes"
         ordering = ["-created_at"]
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if not self.reference:
+            year = datetime.date.today().year
+            self.reference = f"FE-{year}-{self.pk:05d}"
+            FicheExterne.objects.filter(pk=self.pk).update(reference=self.reference)
+
     def __str__(self) -> str:
-        return f"FE-{self.pk:05d} | {self.department} | {self.get_status_display()}"
+        return f"{self.reference or f'FE-{self.pk:05d}'} | {self.department} | {self.get_status_display()}"
 
 
 class FicheExterneItem(models.Model):
@@ -260,14 +288,14 @@ class FicheExterneItem(models.Model):
         decimal_places=2,
         null=True,
         blank=True,
-        verbose_name="Montant Prestataire (DZD)",
+        verbose_name="Montant Prestataire (FCFA)",
     )
     montant_client = models.DecimalField(
         max_digits=14,
         decimal_places=2,
         null=True,
         blank=True,
-        verbose_name="Montant Client (DZD)",
+        verbose_name="Montant Client (FCFA)",
     )
 
     class Meta:

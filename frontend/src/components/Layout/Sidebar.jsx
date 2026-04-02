@@ -158,7 +158,10 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) 
   const unreadCount = useSelector(selectUnreadCount)
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'DIRECTOR'
   const isCollaborateur = user?.role === 'COLLABORATEUR'
-  const visibleNavItems = navItems.filter(item => !(item.hideForCollaborateur && isCollaborateur))
+  const hasSpecialRole = user?.is_comptable || user?.is_rh
+  const visibleNavItems = navItems.filter(item =>
+    !(item.hideForCollaborateur && isCollaborateur && !hasSpecialRole)
+  )
 
   const sidebarContent = (
     <div className="flex h-full flex-col" style={{ backgroundColor: '#162C54' }}>
@@ -295,7 +298,7 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) 
                 <p className="px-3 mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: 'rgba(55,182,233,0.6)' }}>
                   Navigation
                 </p>
-                {navItems.map((item) => (
+                {visibleNavItems.map((item) => (
                   <NavItem key={item.to} item={item} collapsed={false} onClick={onClose} badge={item.notifBadge ? unreadCount : 0} />
                 ))}
                 {isAdmin && (

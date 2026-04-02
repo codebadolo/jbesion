@@ -1,38 +1,44 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import {
-  fetchFicheById,
-  submitFiche,
-  executeFiche,
-  markReceived,
-  selectCurrentFiche,
-  selectFichesLoading,
-  selectFichesError,
-  clearCurrentFiche,
-} from '../../store/fichesSlice.js'
-import { selectUser } from '../../store/authSlice.js'
-import StatusBadge from '../../components/Common/StatusBadge.jsx'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { getAgentsLiaison } from '../../api/adminAPI.js'
+import { createBonCommande, getBonCommandeById, getBonsCommande } from '../../api/bonsCommandeAPI.js'
+import { cancelBonPaiement, createBonPaiement, getBonsPaiement, validateBonPaiement } from '../../api/bonsPaiementAPI.js'
+import { createFicheMission, getFichesMission, rejeterMission, soumettreMission, validerMission } from '../../api/missionsAPI.js'
 import LoadingSpinner from '../../components/Common/LoadingSpinner.jsx'
+import StatusBadge from '../../components/Common/StatusBadge.jsx'
 import ItemsTable from '../../components/Fiches/ItemsTable.jsx'
 import ValidationSection from '../../components/Fiches/ValidationSection.jsx'
-import { formatDate, getFullName, formatMontant } from '../../utils/helpers.js'
-import { VALIDATION_ROLES, ROLE_LABELS } from '../../utils/constants.js'
-import { exportFichePDF } from '../../utils/exportPDF.js'
-import { getBonsCommande, getBonCommandeById, createBonCommande } from '../../api/bonsCommandeAPI.js'
-import { getBonsPaiement, createBonPaiement, validateBonPaiement, cancelBonPaiement } from '../../api/bonsPaiementAPI.js'
-import { getFichesMission, createFicheMission, soumettreMission, validerMission, rejeterMission } from '../../api/missionsAPI.js'
-import { getAgentsLiaison } from '../../api/adminAPI.js'
+import { selectUser } from '../../store/authSlice.js'
 import {
-  soumettreDAF, validerProformas,
-  approuverDAF, rejeterDAF,
-  approuverDG, rejeterDG,
-  executerBC, cloturerBC,
-  selectionnerFourn, uploadProforma, deleteProforma,
+    approuverDAF,
+    approuverDG,
+    cloturerBC,
+    deleteProforma,
+    executerBC,
+    rejeterDAF,
+    rejeterDG,
+    selectionnerFourn,
+    soumettreDAF,
+    uploadProforma,
+    validerProformas,
 } from '../../store/bonsCommandeSlice.js'
+import {
+    clearCurrentFiche,
+    executeFiche,
+    fetchFicheById,
+    markReceived,
+    selectCurrentFiche,
+    selectFichesError,
+    selectFichesLoading,
+    submitFiche,
+} from '../../store/fichesSlice.js'
+import { ROLE_LABELS, VALIDATION_ROLES } from '../../utils/constants.js'
+import { exportFichePDF } from '../../utils/exportPDF.js'
+import { formatDate, formatMontant, getFullName } from '../../utils/helpers.js'
 
 // ─── Workflow steps ───────────────────────────────────────────────────────────
-const WORKFLOW_STEPS = [
+const WORKFLOW_STEPS_INTERNE = [
   { key: 'DRAFT',             label: 'Brouillon' },
   { key: 'PENDING_MANAGER',   label: 'Avis supérieur' },
   { key: 'PENDING_DAF',       label: 'Approbation DAF' },
@@ -42,10 +48,27 @@ const WORKFLOW_STEPS = [
   { key: 'DELIVERED',         label: 'Réceptionné' },
 ]
 
-const STEP_ORDER = WORKFLOW_STEPS.map((s) => s.key)
+const WORKFLOW_STEPS_EXTERNE = [
+  { key: 'DRAFT',             label: 'Brouillon' },
+  { key: 'PENDING_MANAGER',   label: 'Avis supérieur' },
+  { key: 'PENDING_DIRECTOR',  label: 'Accord DG' },
+  { key: 'APPROVED',          label: 'Approuvé' },
+  { key: 'IN_EXECUTION',      label: 'En exécution' },
+  { key: 'DELIVERED',         label: 'Réceptionné' },
+]
 
-function WorkflowTracker({ status }) {
-  const currentIdx = STEP_ORDER.indexOf(status)
+// Clarification statuses map to the effective workflow step they pause
+const CLARIFICATION_STEP_MAP = {
+  PENDING_CLARIFICATION_DAF: 'PENDING_DAF',
+  PENDING_CLARIFICATION_DIR: 'PENDING_DIRECTOR',
+}
+
+function WorkflowTracker({ status, ficheType }) {
+  const steps = ficheType === 'externe' ? WORKFLOW_STEPS_EXTERNE : WORKFLOW_STEPS_INTERNE
+  const effectiveStatus = CLARIFICATION_STEP_MAP[status] || status
+  const currentIdx = steps.findIndex((s) => s.key === effectiveStatus)
+  const isClarification = status in CLARIFICATION_STEP_MAP
+
   if (status === 'REJECTED') {
     return (
       <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-3">
@@ -58,44 +81,59 @@ function WorkflowTracker({ status }) {
   }
 
   return (
-    <ol className="space-y-2">
-      {WORKFLOW_STEPS.map((step, idx) => {
-        const done    = idx < currentIdx
-        const active  = idx === currentIdx
-        const pending = idx > currentIdx
-        return (
-          <li key={step.key} className="flex items-center gap-3">
-            <span
-              className={[
-                'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold ring-2',
-                done   ? 'bg-green-500 text-white ring-green-200' : '',
-                active ? 'bg-blue-600 text-white ring-blue-200' : '',
-                pending ? 'bg-gray-100 text-gray-400 ring-gray-200' : '',
-              ].join(' ')}
-            >
-              {done ? (
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                </svg>
-              ) : (
-                idx + 1
+    <div className="space-y-3">
+      {isClarification && (
+        <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 font-medium">
+          <svg className="h-4 w-4 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" />
+          </svg>
+          Clarification demandée — en attente de réponse
+        </div>
+      )}
+      <ol className="space-y-2">
+        {steps.map((step, idx) => {
+          const done    = idx < currentIdx
+          const active  = idx === currentIdx
+          const pending = idx > currentIdx
+          return (
+            <li key={step.key} className="flex items-center gap-3">
+              <span
+                className={[
+                  'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold ring-2',
+                  done   ? 'bg-green-500 text-white ring-green-200' : '',
+                  active && !isClarification ? 'bg-blue-600 text-white ring-blue-200' : '',
+                  active && isClarification  ? 'bg-amber-500 text-white ring-amber-200' : '',
+                  pending ? 'bg-gray-100 text-gray-400 ring-gray-200' : '',
+                ].join(' ')}
+              >
+                {done ? (
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                  </svg>
+                ) : (
+                  idx + 1
+                )}
+              </span>
+              <span className={[
+                'text-sm',
+                done    ? 'text-green-700 font-medium' : '',
+                active && !isClarification ? 'text-blue-700 font-semibold' : '',
+                active && isClarification  ? 'text-amber-700 font-semibold' : '',
+                pending ? 'text-gray-400' : '',
+              ].join(' ')}>
+                {step.label}
+              </span>
+              {active && !isClarification && (
+                <span className="ml-auto flex h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
               )}
-            </span>
-            <span className={[
-              'text-sm',
-              done    ? 'text-green-700 font-medium' : '',
-              active  ? 'text-blue-700 font-semibold' : '',
-              pending ? 'text-gray-400' : '',
-            ].join(' ')}>
-              {step.label}
-            </span>
-            {active && (
-              <span className="ml-auto flex h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
-            )}
-          </li>
-        )
-      })}
-    </ol>
+              {active && isClarification && (
+                <span className="ml-auto flex h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+              )}
+            </li>
+          )
+        })}
+      </ol>
+    </div>
   )
 }
 
@@ -116,7 +154,7 @@ function BpItemsTable({ items, onChange }) {
           <thead className="bg-gray-50">
             <tr>
               <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase w-full">Désignation / Détail</th>
-              <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase w-40">Montant (DZD)</th>
+              <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase w-40">Montant (FCFA)</th>
               <th className="w-8" />
             </tr>
           </thead>
@@ -301,7 +339,7 @@ const bpCanManage = (u) =>
 const EMPTY_BP = { beneficiaire: '', motif: '', mode_paiement: '', date: '', montant: '', montant_lettres: '', items: [{ designation: '', montant: '' }] }
 const MODE_LABELS = { ESPECE: 'Espèces', CHEQUE: 'Chèque' }
 
-function BonsPaiementSection({ ficheType, ficheId, user, fiche }) {
+function BonsPaiementSection({ ficheType, ficheId, user, fiche, bonsCommande }) {
   const [bons,       setBons]       = useState([])
   const [loading,    setLoading]    = useState(true)
   const [actLoading, setActLoading] = useState({})
@@ -383,22 +421,41 @@ function BonsPaiementSection({ ficheType, ficheId, user, fiche }) {
           <button type="button"
             onClick={() => {
               const d = fiche || {}
-              const createdBy = d.created_by_detail
-              const beneficiaire = createdBy
-                ? `${createdBy.first_name || ''} ${createdBy.last_name || ''}`.trim()
-                : ''
-              const motif = d.numero
-                ? `Paiement relatif à la fiche ${d.numero}`
-                : ''
-              const ficheItems = (d.items || [])
-                .filter((it) => it.designation || it.description)
-                .map((it) => ({
-                  designation: it.designation || it.description || '',
-                  montant: String(it.montant_prestataire || it.montant || ''),
-                }))
-              const prefillItems = ficheItems.length > 0 ? ficheItems : [{ designation: '', montant: '' }]
               const today = new Date().toISOString().slice(0, 10)
-              setNewBpData({ ...EMPTY_BP, beneficiaire, motif, date: today, items: prefillItems })
+
+              // Find the BC with a selected supplier (fournisseur retenu)
+              const bcs = bonsCommande || []
+              const selectedBc = bcs.find((bc) => bc.fournisseur_selectionne_detail)
+              const supplier = selectedBc?.fournisseur_selectionne_detail
+
+              // If no supplier selected, look for the moins disant (lowest proforma montant)
+              // across all BCs — only available if individual BC details have been loaded
+              // (not available in list view; fallback to fiche creator in that case)
+              const beneficiaire = supplier?.fournisseur_nom
+                || (() => {
+                  const createdBy = d.created_by_detail
+                  return createdBy
+                    ? `${createdBy.first_name || ''} ${createdBy.last_name || ''}`.trim()
+                    : ''
+                })()
+
+              const motif = selectedBc?.objet
+                || (d.numero ? `Paiement relatif à la fiche ${d.reference || d.numero}` : '')
+
+              // Items: use supplier montant if available, else fiche line items
+              const items = supplier
+                ? [{ designation: selectedBc.objet || motif, montant: String(supplier.montant || '') }]
+                : (() => {
+                    const ficheItems = (d.items || [])
+                      .filter((it) => it.designation || it.description)
+                      .map((it) => ({
+                        designation: it.designation || it.description || '',
+                        montant: String(it.montant_prestataire || it.montant || ''),
+                      }))
+                    return ficheItems.length > 0 ? ficheItems : [{ designation: '', montant: '' }]
+                  })()
+
+              setNewBpData({ ...EMPTY_BP, beneficiaire, motif, date: today, items })
               setShowModal(true)
               setCreateErr(null)
             }}
@@ -487,7 +544,7 @@ function BonsPaiementSection({ ficheType, ficheId, user, fiche }) {
                             <thead className="bg-gray-50">
                               <tr>
                                 <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Désignation</th>
-                                <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase w-36">Montant (DZD)</th>
+                                <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase w-36">Montant (FCFA)</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 bg-white">
@@ -590,7 +647,7 @@ function BonsPaiementSection({ ficheType, ficheId, user, fiche }) {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="form-label">Montant total (DZD)
+                <label className="form-label">Montant total (FCFA)
                   <span className="ml-1 text-xs font-normal text-gray-400">— auto calculé si vide</span>
                 </label>
                 <input type="number" min="0" step="0.01" className="form-input"
@@ -1896,6 +1953,7 @@ export default function FicheDetail({ type }) {
   const [receivedLoading,  setReceivedLoading]  = useState(false)
   const [receivedError,    setReceivedError]    = useState(null)
   const [hasBcApproved,    setHasBcApproved]    = useState(false)
+  const [bcsLoaded,        setBcsLoaded]        = useState([])
 
   const [executeData, setExecuteData] = useState({
     execution_fournisseur:      '',
@@ -2240,7 +2298,7 @@ export default function FicheDetail({ type }) {
             ficheType={ficheType}
             ficheId={Number(id)}
             user={user}
-            onBcsLoaded={(list) => setHasBcApproved(list.some((b) => BC_APPROVED_STATUSES.includes(b.status)))}
+            onBcsLoaded={(list) => { setHasBcApproved(list.some((b) => BC_APPROVED_STATUSES.includes(b.status))); setBcsLoaded(list) }}
           />
 
           {/* ── Bons de paiement liés ────────────────────────────────── */}
@@ -2249,6 +2307,7 @@ export default function FicheDetail({ type }) {
             ficheId={Number(id)}
             user={user}
             fiche={fiche}
+            bonsCommande={bcsLoaded}
           />
 
           {/* ── Missions liées (fiche externe uniquement) ─────────── */}
@@ -2357,7 +2416,7 @@ export default function FicheDetail({ type }) {
               <h2 className="text-sm font-semibold text-gray-700">Avancement</h2>
             </div>
             <div className="px-5 py-4">
-              <WorkflowTracker status={fiche.status} />
+              <WorkflowTracker status={fiche.status} ficheType={ficheType} />
             </div>
           </div>
 
@@ -2491,7 +2550,7 @@ export default function FicheDetail({ type }) {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="form-label">
-                      Montant total (DZD)
+                      Montant total (FCFA)
                       <span className="ml-1.5 text-xs font-normal text-gray-400">— auto calculé</span>
                     </label>
                     <div className="relative">
@@ -2539,7 +2598,7 @@ export default function FicheDetail({ type }) {
               <p className="text-sm text-gray-600">
                 Total :{' '}
                 <span className="font-bold text-gray-900">
-                  {(parseFloat(executeData.execution_montant) || executeTotal).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} DZD
+                  {(parseFloat(executeData.execution_montant) || executeTotal).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} FCFA
                 </span>
               </p>
               <div className="flex gap-2">

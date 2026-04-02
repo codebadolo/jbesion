@@ -368,7 +368,9 @@ export default function Dashboard() {
   const pendingInterne = (ci.PENDING_MANAGER || 0) + (ci.PENDING_DAF || 0) + (ci.PENDING_DIRECTOR || 0)
   const pendingExterne = (ce.PENDING_MANAGER || 0) + (ce.PENDING_DIRECTOR || 0)
 
-  const isEmployee = userRole === 'COLLABORATEUR'
+  const isComptable = user?.is_comptable || false
+  const isRH        = user?.is_rh || false
+  const isEmployee  = userRole === 'COLLABORATEUR' && !isComptable && !isRH
 
   // Labels personnalisés selon le rôle
   const totalLabel    = isEmployee ? 'Mes fiches'          : 'Total fiches'
@@ -428,7 +430,7 @@ export default function Dashboard() {
 
   const BAR_COLORS = [C_MID, '#64B5F6', '#FFA726', '#FB8C00', '#43A047', '#E53935']
 
-  const canSeePending = ['MANAGER', 'DAF', 'DIRECTOR', 'ADMIN'].includes(userRole)
+  const canSeePending = ['MANAGER', 'DAF', 'DIRECTOR', 'ADMIN'].includes(userRole) || isComptable || isRH
   const canSeeCharts  = !isEmployee
 
   return (
@@ -666,6 +668,60 @@ export default function Dashboard() {
                 </div>
                 <p className="text-sm font-medium text-gray-700">Nouvelle fiche externe</p>
               </button>
+              {isComptable && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/bons-paiement')}
+                    className="flex w-full items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-gray-200 hover:bg-gray-50 transition-all text-left"
+                  >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg flex-shrink-0" style={{ backgroundColor: 'rgba(124,58,237,0.08)', color: '#7c3aed' }}>
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75" />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-medium text-gray-700">Bons de Paiement</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/bons-commande')}
+                    className="flex w-full items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-gray-200 hover:bg-gray-50 transition-all text-left"
+                  >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg flex-shrink-0" style={{ backgroundColor: 'rgba(16,185,129,0.08)', color: '#059669' }}>
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007Z" />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-medium text-gray-700">Bons de Commande</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/missions')}
+                    className="flex w-full items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-gray-200 hover:bg-gray-50 transition-all text-left"
+                  >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg flex-shrink-0" style={{ backgroundColor: 'rgba(245,158,11,0.08)', color: '#d97706' }}>
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-medium text-gray-700">Missions</p>
+                  </button>
+                </>
+              )}
+              {isRH && !isComptable && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/missions')}
+                  className="flex w-full items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-gray-200 hover:bg-gray-50 transition-all text-left"
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg flex-shrink-0" style={{ backgroundColor: 'rgba(245,158,11,0.08)', color: '#d97706' }}>
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+                    </svg>
+                  </div>
+                  <p className="text-sm font-medium text-gray-700">Missions</p>
+                </button>
+              )}
             </div>
           </div>
         )}

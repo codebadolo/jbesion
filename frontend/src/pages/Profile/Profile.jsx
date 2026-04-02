@@ -8,6 +8,8 @@ import {
 } from '../../store/authSlice.js'
 import { ROLE_LABELS } from '../../utils/constants.js'
 
+const C_MID = '#3475BB'
+
 // Configuration par rôle : couleur, description, permissions
 const ROLE_CONFIG = {
   EMPLOYEE: {

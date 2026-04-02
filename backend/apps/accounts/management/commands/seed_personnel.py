@@ -31,7 +31,7 @@ DEPARTMENTS_DATA = [
     {"name": "Production",          "code": "PROD"},
 ]
 
-# Format : (nom_complet, poste, département, email, rôle_app, est_manager_de_dept)
+# Format : (nom_complet, poste, département, email, rôle_app, est_manager_de_dept, is_comptable, is_rh)
 PERSONNEL_DATA = [
     # ── Administrateur système ──────────────────────────────────────────────
     (
@@ -40,6 +40,8 @@ PERSONNEL_DATA = [
         "Direction Générale",
         "admin@jofedigital.com",
         Role.ADMIN,
+        False,
+        False,
         False,
     ),
 
@@ -51,6 +53,8 @@ PERSONNEL_DATA = [
         "ngerard@jofedigital.com",
         Role.DIRECTOR,
         False,
+        False,
+        False,
     ),
 
     # ── Admin & Finance ─────────────────────────────────────────────────────
@@ -61,6 +65,8 @@ PERSONNEL_DATA = [
         "bchristian@jofedigital.com",
         Role.DAF,
         True,   # manager du département
+        False,
+        False,
     ),
     (
         "NIGNA Tatié Brice",
@@ -69,6 +75,8 @@ PERSONNEL_DATA = [
         "finance@jofedigital.com",
         Role.COLLABORATEUR,
         False,
+        True,   # is_comptable
+        False,  # is_rh
     ),
     (
         "PITROIPA J. Laeticia",
@@ -77,6 +85,8 @@ PERSONNEL_DATA = [
         "rh@jofedigital.com",
         Role.COLLABORATEUR,
         False,
+        False,  # is_comptable
+        True,   # is_rh
     ),
     (
         "SANDWIDI Amanda Ange",
@@ -85,6 +95,8 @@ PERSONNEL_DATA = [
         "asandwidi@jofedigital.com",
         Role.COLLABORATEUR,
         False,
+        True,   # is_comptable
+        False,  # is_rh
     ),
     (
         "DELMA Edwige",
@@ -93,6 +105,8 @@ PERSONNEL_DATA = [
         "assistantcomptable@jofedigital.bf",
         Role.COLLABORATEUR,
         False,
+        True,   # is_comptable
+        False,  # is_rh
     ),
     (
         "NONG-NAABA Toucoumnongo Adé",
@@ -335,7 +349,10 @@ class Command(BaseCommand):
 
         hashed_password = make_password(DEFAULT_PASSWORD)
 
-        for (full_name, poste, dept_name, email, role, is_dept_manager) in PERSONNEL_DATA:
+        for entry in PERSONNEL_DATA:
+            full_name, _, dept_name, email, role, is_dept_manager = entry[:6]
+            is_comptable = entry[6] if len(entry) > 6 else False
+            is_rh = entry[7] if len(entry) > 7 else False
             dept = dept_map[dept_name]
 
             # Username fixe basé sur le nom — jamais de suffixe numérique
@@ -370,6 +387,8 @@ class Command(BaseCommand):
                     "role": role,
                     "department": dept,
                     "is_active": True,
+                    "is_comptable": is_comptable,
+                    "is_rh": is_rh,
                 },
             )
 
@@ -377,9 +396,11 @@ class Command(BaseCommand):
                 # Mettre à jour si l'utilisateur existait déjà
                 user.role = role
                 user.department = dept
+                user.is_comptable = is_comptable
+                user.is_rh = is_rh
                 if not user.email and clean_email:
                     user.email = clean_email
-                user.save(update_fields=["role", "department", "email"])
+                user.save(update_fields=["role", "department", "email", "is_comptable", "is_rh"])
 
             flag = "✓ créé" if created else "→ màj"
             role_label = dict(Role.choices)[role]
@@ -396,7 +417,8 @@ class Command(BaseCommand):
 
         director = user_map.get("NOUGBOLO Gérard")
 
-        for (full_name, _, dept_name, _, role, is_dept_manager) in PERSONNEL_DATA:
+        for entry in PERSONNEL_DATA:
+            full_name, _, dept_name, _, role, is_dept_manager = entry[:6]
             user = user_map[full_name]
             dept_manager = dept_manager_map.get(dept_name)
 

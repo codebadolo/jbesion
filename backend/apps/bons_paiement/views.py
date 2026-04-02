@@ -14,6 +14,7 @@ Endpoints:
 
 from django.db.models import Q
 from django.db import models
+from django.utils import timezone
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -103,6 +104,36 @@ class BonPaiementViewSet(viewsets.ModelViewSet):
             NotificationType.BON_VALIDE,
             f"Bon de paiement {bon.numero} validé — Bénéficiaire : {bon.beneficiaire}",
         )
+
+        # Auto-transition the linked FicheInterne to IN_EXECUTION
+        if bon.fiche_type == "INTERNE" and bon.fiche_id:
+            from apps.fiches.models import FicheInterne, FicheInterneStatus
+            try:
+                fiche = FicheInterne.objects.get(pk=bon.fiche_id)
+                if fiche.status == FicheInterneStatus.APPROVED:
+                    fiche.status = FicheInterneStatus.IN_EXECUTION
+                    fiche.executed_by = request.user
+                    fiche.executed_at = timezone.now()
+                    fiche.save(update_fields=["status", "executed_by", "executed_at", "updated_at"])
+                    # Notify fiche creator and relevant roles
+                    recipients = list(User.objects.filter(
+                        role__in=[Role.ADMIN, Role.DIRECTOR, Role.DAF], is_active=True
+                    ))
+                    if fiche.created_by not in recipients:
+                        recipients.append(fiche.created_by)
+                    for user in recipients:
+                        if user != request.user:
+                            Notification.objects.create(
+                                recipient=user,
+                                sender=request.user,
+                                message=f"Fiche {fiche.reference} passée en exécution suite au bon de paiement {bon.numero}.",
+                                notification_type=NotificationType.IN_EXECUTION,
+                                fiche_type="INTERNE",
+                                fiche_id=fiche.pk,
+                            )
+            except FicheInterne.DoesNotExist:
+                pass
+
         return Response(BonPaiementSerializer(bon, context={"request": request}).data)
 
     @action(detail=True, methods=["post"])

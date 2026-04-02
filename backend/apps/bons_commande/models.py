@@ -12,6 +12,8 @@ Workflow :
   6. Exécution → DONE.
 """
 
+import datetime
+
 from django.conf import settings
 from django.db import models
 
@@ -45,7 +47,7 @@ class BonCommande(models.Model):
         blank=True,
         verbose_name="Numéro",
     )
-    date = models.DateField(verbose_name="Date")
+    date = models.DateField(default=datetime.date.today, verbose_name="Date")
     objet = models.TextField(verbose_name="Objet / Description")
 
     # Référence optionnelle (numéro de commande interne, etc.)
