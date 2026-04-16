@@ -60,7 +60,10 @@ def _notify(recipients, sender, message, notif_type, fiche_type, fiche_id):
     """
     Create Notification records for each recipient (skip sender).
     Global observers (ADMIN, DIRECTOR, DAF, comptables, RH) always receive a copy.
+    Also sends an e-mail to each recipient.
     """
+    from apps.fiches.emails import notify_email
+
     observers = list(
         User.objects.filter(is_active=True).filter(
             Q(role__in=[Role.ADMIN, Role.DIRECTOR, Role.DAF])
@@ -74,16 +77,26 @@ def _notify(recipients, sender, message, notif_type, fiche_type, fiche_id):
         if u.pk not in seen_pks:
             seen_pks.add(u.pk)
             all_recipients.append(u)
-    for user in all_recipients:
-        if user != sender:
-            Notification.objects.create(
-                recipient=user,
-                sender=sender,
-                message=message,
-                notification_type=notif_type,
-                fiche_type=fiche_type,
-                fiche_id=fiche_id,
-            )
+
+    notif_recipients = [u for u in all_recipients if u != sender]
+    for user in notif_recipients:
+        Notification.objects.create(
+            recipient=user,
+            sender=sender,
+            message=message,
+            notification_type=notif_type,
+            fiche_type=fiche_type,
+            fiche_id=fiche_id,
+        )
+
+    # Send e-mail to all notification recipients
+    type_label = "Fiche Interne" if fiche_type == FicheType.INTERNE else "Fiche Externe"
+    ref = f"{'FI' if fiche_type == FicheType.INTERNE else 'FE'}-{fiche_id:05d}"
+    notify_email(
+        notif_recipients,
+        subject=f"{type_label} {ref} — {notif_type}",
+        body=message,
+    )
 
 
 def _dept_managers(department):
@@ -94,6 +107,31 @@ def _dept_managers(department):
 def _users_by_role(*roles):
     """Return all active users with any of the given roles."""
     return list(User.objects.filter(role__in=roles, is_active=True))
+
+
+def _resolve_recipients(users):
+    """
+    Apply P1 delegation: if a user has an active validated absence,
+    replace them with their suppléant. Keeps original if no suppléant.
+    """
+    from apps.missions.models import AbsenceAgent, AbsenceStatus
+    from django.utils import timezone as tz
+    today = tz.now().date()
+    resolved = []
+    seen_pks: set = set()
+    for user in users:
+        active_absence = user.absences.filter(
+            status=AbsenceStatus.VALIDATED,
+            date_debut__lte=today,
+            date_fin__gte=today,
+        ).first()
+        target = user
+        if active_absence and hasattr(user, 'suppleant') and user.suppleant:
+            target = user.suppleant
+        if target.pk not in seen_pks:
+            seen_pks.add(target.pk)
+            resolved.append(target)
+    return resolved
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +213,8 @@ INTERNE_NEXT_STATUS = {
 
 # Next status in the FicheExterne approval chain
 EXTERNE_NEXT_STATUS = {
-    FicheExterneStatus.PENDING_MANAGER:  FicheExterneStatus.PENDING_DIRECTOR,
+    FicheExterneStatus.PENDING_MANAGER:  FicheExterneStatus.PENDING_DAF,
+    FicheExterneStatus.PENDING_DAF:      FicheExterneStatus.PENDING_DIRECTOR,
     FicheExterneStatus.PENDING_DIRECTOR: FicheExterneStatus.APPROVED,
 }
 
@@ -213,7 +252,7 @@ class FicheInterneViewSet(viewsets.ModelViewSet):
         # Admin & Finance department members see all fiches (they handle execution)
         in_admin_finance = user.department and user.department.code == "AF"
 
-        if user.role in (Role.DAF, Role.DIRECTOR, Role.ADMIN) or in_admin_finance or user.is_rh:
+        if user.role in (Role.DAF, Role.DIRECTOR, Role.ADMIN) or in_admin_finance or user.is_rh or user.is_comptable:
             pass  # see everything
         elif user.role == Role.MANAGER:
             # See all fiches from own department
@@ -649,7 +688,7 @@ class FicheExterneViewSet(viewsets.ModelViewSet):
         # Admin & Finance department members see all fiches (they handle execution)
         in_admin_finance = user.department and user.department.code == "AF"
 
-        if user.role in (Role.DAF, Role.DIRECTOR, Role.ADMIN) or in_admin_finance or user.is_rh:
+        if user.role in (Role.DAF, Role.DIRECTOR, Role.ADMIN) or in_admin_finance or user.is_rh or user.is_comptable:
             pass  # see everything
         elif user.role == Role.MANAGER:
             # See all fiches from own department
@@ -801,14 +840,17 @@ class FicheExterneViewSet(viewsets.ModelViewSet):
             new_status = EXTERNE_NEXT_STATUS[fiche.status]
             decision = (
                 ValidationStatus.FAVORABLE
-                if fiche.status == FicheExterneStatus.PENDING_MANAGER
+                if fiche.status in (FicheExterneStatus.PENDING_MANAGER, FicheExterneStatus.PENDING_DAF)
                 else ValidationStatus.APPROVED
             )
         elif act == "reject":
             new_status = FicheExterneStatus.REJECTED
             decision = ValidationStatus.REJECTED
         else:  # request_clarification
-            new_status = FicheExterneStatus.PENDING_CLARIFICATION_DIR
+            if fiche.status == FicheExterneStatus.PENDING_DAF:
+                new_status = FicheExterneStatus.PENDING_CLARIFICATION_DAF
+            else:
+                new_status = FicheExterneStatus.PENDING_CLARIFICATION_DIR
             decision = ValidationStatus.CLARIFICATION_REQUESTED
 
         ct = ContentType.objects.get_for_model(FicheExterne)
@@ -827,10 +869,16 @@ class FicheExterneViewSet(viewsets.ModelViewSet):
 
         ref = f"FE-{fiche.pk:05d}"
         if act == "approve":
-            if new_status == FicheExterneStatus.PENDING_DIRECTOR:
+            if new_status == FicheExterneStatus.PENDING_DAF:
                 _notify(
-                    _users_by_role(Role.DIRECTOR), user,
-                    f"La fiche {ref} a reçu un avis favorable et attend votre accord pour exécution.",
+                    _resolve_recipients(_users_by_role(Role.DAF)), user,
+                    f"La fiche {ref} a reçu un avis favorable du Manager et attend votre approbation.",
+                    NotificationType.FAVORABLE, FicheType.EXTERNE, fiche.pk,
+                )
+            elif new_status == FicheExterneStatus.PENDING_DIRECTOR:
+                _notify(
+                    _resolve_recipients(_users_by_role(Role.DIRECTOR)), user,
+                    f"La fiche {ref} a été approuvée par le DAF et attend votre accord final.",
                     NotificationType.FAVORABLE, FicheType.EXTERNE, fiche.pk,
                 )
             elif new_status == FicheExterneStatus.APPROVED:
@@ -860,20 +908,32 @@ class FicheExterneViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="respond_clarification")
     def respond_clarification(self, request: Request, pk=None) -> Response:
-        """Manager responds to a clarification request on a FicheExterne."""
+        """Manager/DAF respond to a clarification request on a FicheExterne."""
         fiche: FicheExterne = self.get_object()
         user = request.user
 
-        if not (user.role == Role.MANAGER or user.role == Role.ADMIN or user.is_staff):
-            return Response(
-                {"detail": "Seul le Supérieur Hiérarchique peut répondre aux demandes de clarification."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        if fiche.status != FicheExterneStatus.PENDING_CLARIFICATION_DIR:
+        clarification_statuses = [
+            FicheExterneStatus.PENDING_CLARIFICATION_DAF,
+            FicheExterneStatus.PENDING_CLARIFICATION_DIR,
+        ]
+        if fiche.status not in clarification_statuses:
             return Response(
                 {"detail": "Cette fiche n'est pas en attente de clarification."},
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # PENDING_CLARIFICATION_DAF : le manager répond, retourne au DAF
+        # PENDING_CLARIFICATION_DIR : le manager répond, retourne au DG
+        is_daf_clarif = fiche.status == FicheExterneStatus.PENDING_CLARIFICATION_DAF
+        if is_daf_clarif and not (user.role == Role.MANAGER or user.role == Role.ADMIN or user.is_staff):
+            return Response(
+                {"detail": "Seul le Supérieur Hiérarchique peut répondre à cette clarification."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if not is_daf_clarif and not (user.role == Role.MANAGER or user.role == Role.ADMIN or user.is_staff):
+            return Response(
+                {"detail": "Seul le Supérieur Hiérarchique peut répondre à cette clarification."},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         serializer = RespondClarificationSerializer(data=request.data)
@@ -891,14 +951,22 @@ class FicheExterneViewSet(viewsets.ModelViewSet):
             commentaire=commentaire,
         )
 
-        fiche.status = FicheExterneStatus.PENDING_DIRECTOR
-        fiche.save(update_fields=["status", "updated_at"])
-
-        _notify(
-            _users_by_role(Role.DIRECTOR, Role.DAF), user,
-            f"Clarification fournie pour la fiche FE-{fiche.pk:05d}. Elle est de nouveau en attente de validation DG.",
-            NotificationType.CLARIFICATION_RESPONSE, FicheType.EXTERNE, fiche.pk,
-        )
+        if is_daf_clarif:
+            fiche.status = FicheExterneStatus.PENDING_DAF
+            fiche.save(update_fields=["status", "updated_at"])
+            _notify(
+                _resolve_recipients(_users_by_role(Role.DAF)), user,
+                f"Clarification fournie pour la fiche FE-{fiche.pk:05d}. Elle est de nouveau en attente d'approbation DAF.",
+                NotificationType.CLARIFICATION_RESPONSE, FicheType.EXTERNE, fiche.pk,
+            )
+        else:
+            fiche.status = FicheExterneStatus.PENDING_DIRECTOR
+            fiche.save(update_fields=["status", "updated_at"])
+            _notify(
+                _resolve_recipients(_users_by_role(Role.DIRECTOR)), user,
+                f"Clarification fournie pour la fiche FE-{fiche.pk:05d}. Elle est de nouveau en attente de validation DG.",
+                NotificationType.CLARIFICATION_RESPONSE, FicheType.EXTERNE, fiche.pk,
+            )
 
         return Response(
             FicheExterneSerializer(fiche, context={"request": request}).data,

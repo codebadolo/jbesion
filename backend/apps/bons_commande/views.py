@@ -37,19 +37,37 @@ from .serializers import (
 
 
 def _notify_bc(bon, sender, notif_type, message):
-    """Notifie ADMIN, DAF et DG pour un événement de Bon de Commande."""
+    """
+    Notifie ADMIN, DAF, DG et le créateur du bon pour un événement de Bon de Commande.
+    Envoie également un e-mail à chaque destinataire.
+    """
     from apps.accounts.models import User
-    recipients = User.objects.filter(role__in=[Role.ADMIN, Role.DAF, Role.DIRECTOR], is_active=True)
+    from apps.fiches.emails import notify_email
+
+    base_recipients = list(
+        User.objects.filter(role__in=[Role.ADMIN, Role.DAF, Role.DIRECTOR], is_active=True)
+    )
+    # Toujours inclure le créateur du bon
+    if bon.created_by and bon.created_by not in base_recipients:
+        base_recipients.append(bon.created_by)
+
+    recipients = [u for u in base_recipients if u != sender]
+
     for user in recipients:
-        if user != sender:
-            Notification.objects.create(
-                recipient=user,
-                sender=sender,
-                message=message,
-                notification_type=notif_type,
-                fiche_type=bon.fiche_type or "",
-                fiche_id=bon.fiche_id,
-            )
+        Notification.objects.create(
+            recipient=user,
+            sender=sender,
+            message=message,
+            notification_type=notif_type,
+            fiche_type=bon.fiche_type or "",
+            fiche_id=bon.fiche_id,
+        )
+
+    notify_email(
+        recipients,
+        subject=f"Bon de Commande {bon.numero} — {notif_type}",
+        body=message,
+    )
 
 
 class BonCommandeViewSet(viewsets.ModelViewSet):

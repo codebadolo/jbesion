@@ -94,6 +94,7 @@ class CanValidateFicheExterne(BasePermission):
 
     Mapping:
       PENDING_MANAGER  → MANAGER
+      PENDING_DAF      → DAF
       PENDING_DIRECTOR → DIRECTOR
     """
 
@@ -101,6 +102,7 @@ class CanValidateFicheExterne(BasePermission):
 
     STATUS_ROLE_MAP = {
         FicheExterneStatus.PENDING_MANAGER:  Role.MANAGER,
+        FicheExterneStatus.PENDING_DAF:      Role.DAF,
         FicheExterneStatus.PENDING_DIRECTOR: Role.DIRECTOR,
     }
 

@@ -22,7 +22,8 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from apps.accounts.models import Role
+from apps.accounts.models import Role, User
+from apps.fiches.emails import notify_email
 from .models import AbsenceAgent, AbsenceStatus, FicheMission, FicheMissionStatus
 from .permissions import CanManageAbsence, CanManageMission
 from .serializers import (
@@ -73,7 +74,10 @@ class FicheMissionViewSet(viewsets.ModelViewSet):
         return FicheMissionSerializer
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        user = self.request.user
+        if not (user.is_rh or user.role == Role.ADMIN or user.is_staff):
+            raise PermissionDenied("Seule la RH peut créer des fiches de mission.")
+        serializer.save(created_by=user)
 
     # ── Workflow ─────────────────────────────────────────────────────
 
@@ -83,8 +87,29 @@ class FicheMissionViewSet(viewsets.ModelViewSet):
         mission = self.get_object()
         if mission.status != FicheMissionStatus.DRAFT:
             raise ValidationError("Seule une fiche en brouillon peut être soumise.")
+        user = request.user
+        if mission.created_by != user and not (user.is_rh or user.role == Role.ADMIN or user.is_staff):
+            raise PermissionDenied("Seule la RH créatrice peut soumettre cette fiche.")
         mission.status = FicheMissionStatus.PENDING_MANAGER
         mission.save(update_fields=["status", "updated_at"])
+
+        # Notifier les managers du département par e-mail
+        managers = list(User.objects.filter(
+            role=Role.MANAGER, department=mission.department, is_active=True
+        ))
+        if not managers:
+            managers = list(User.objects.filter(role=Role.MANAGER, is_active=True))
+        nom = mission.nom_prenom or mission.beneficiaire.get_full_name() if mission.beneficiaire else mission.nom_prenom
+        notify_email(
+            managers,
+            subject=f"Fiche Mission {mission.numero} — Validation requise",
+            body=(
+                f"La fiche de mission {mission.numero} pour {nom} "
+                f"(destination : {mission.destination}) a été soumise et requiert votre approbation.\n\n"
+                f"Objet : {mission.objet_mission}"
+            ),
+        )
+
         return Response(FicheMissionSerializer(mission, context={"request": request}).data)
 
     @action(detail=True, methods=["post"])
@@ -103,21 +128,24 @@ class FicheMissionViewSet(viewsets.ModelViewSet):
             FicheMissionStatus.PENDING_MANAGER: (
                 [Role.MANAGER, Role.DAF, Role.DIRECTOR, Role.ADMIN],
                 FicheMissionStatus.PENDING_DAF,
+                "DAF",          # rôle destinataire suivant
             ),
             FicheMissionStatus.PENDING_DAF: (
                 [Role.DAF, Role.ADMIN],
                 FicheMissionStatus.PENDING_DG,
+                "DIRECTOR",
             ),
             FicheMissionStatus.PENDING_DG: (
                 [Role.DIRECTOR, Role.ADMIN],
                 FicheMissionStatus.APPROVED,
+                None,           # notifie le créateur
             ),
         }
 
         if mission.status not in transitions:
             raise ValidationError(f"La fiche ne peut pas être validée depuis le statut '{mission.get_status_display()}'.")
 
-        allowed_roles, next_status = transitions[mission.status]
+        allowed_roles, next_status, next_role = transitions[mission.status]
         if user.role not in allowed_roles and not user.is_staff and not user.is_rh:
             raise PermissionDenied("Vous n'avez pas la permission de valider à cette étape.")
 
@@ -125,6 +153,31 @@ class FicheMissionViewSet(viewsets.ModelViewSet):
         if commentaire:
             mission.notes = (mission.notes + f"\n[{user}] {commentaire}").strip()
         mission.save(update_fields=["status", "notes", "updated_at"])
+
+        # E-mail de notification
+        nom = mission.nom_prenom
+        if next_role:
+            email_recipients = list(User.objects.filter(role=next_role, is_active=True))
+            notify_email(
+                email_recipients,
+                subject=f"Fiche Mission {mission.numero} — Validation requise ({next_role})",
+                body=(
+                    f"La fiche de mission {mission.numero} pour {nom} a été validée par "
+                    f"{user.get_full_name() or user.username} et passe à votre niveau.\n\n"
+                    f"Destination : {mission.destination}\nObjet : {mission.objet_mission}"
+                ),
+            )
+        else:
+            # Approbation finale → notifier le créateur
+            notify_email(
+                [mission.created_by],
+                subject=f"Fiche Mission {mission.numero} — Approuvée",
+                body=(
+                    f"La fiche de mission {mission.numero} pour {nom} a été approuvée.\n\n"
+                    f"Destination : {mission.destination}"
+                ),
+            )
+
         return Response(FicheMissionSerializer(mission, context={"request": request}).data)
 
     @action(detail=True, methods=["post"])
@@ -145,6 +198,18 @@ class FicheMissionViewSet(viewsets.ModelViewSet):
         if commentaire:
             mission.notes = (mission.notes + f"\n[{user}] REJET : {commentaire}").strip()
         mission.save(update_fields=["status", "notes", "updated_at"])
+
+        # Notifier le créateur du rejet
+        motif = f" Motif : {commentaire}" if commentaire else ""
+        notify_email(
+            [mission.created_by],
+            subject=f"Fiche Mission {mission.numero} — Rejetée",
+            body=(
+                f"La fiche de mission {mission.numero} pour {mission.nom_prenom} a été rejetée par "
+                f"{user.get_full_name() or user.username}.{motif}"
+            ),
+        )
+
         return Response(FicheMissionSerializer(mission, context={"request": request}).data)
 
     @action(detail=True, methods=["post"])

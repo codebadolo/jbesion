@@ -37,7 +37,9 @@ class FicheInterneStatus(models.TextChoices):
 class FicheExterneStatus(models.TextChoices):
     DRAFT                     = "DRAFT",                     "Brouillon"
     PENDING_MANAGER           = "PENDING_MANAGER",           "En attente du Supérieur Hiérarchique"
+    PENDING_DAF               = "PENDING_DAF",               "En attente du DAF"
     PENDING_DIRECTOR          = "PENDING_DIRECTOR",          "En attente du DG"
+    PENDING_CLARIFICATION_DAF = "PENDING_CLARIFICATION_DAF", "Clarification demandée (DAF)"
     PENDING_CLARIFICATION_DIR = "PENDING_CLARIFICATION_DIR", "Clarification demandée (DG)"
     APPROVED                  = "APPROVED",                  "Approuvée"
     REJECTED                  = "REJECTED",                  "Rejetée"
@@ -184,8 +186,8 @@ class FicheExterne(models.Model):
     """
     External (partner) need sheet.
 
-    Workflow:  DRAFT → PENDING_MANAGER → PENDING_DIRECTOR
-               → APPROVED / REJECTED  (no DAF step)
+    Workflow:  DRAFT → PENDING_MANAGER → PENDING_DAF → PENDING_DIRECTOR
+               → APPROVED / REJECTED
     """
 
     reference = models.CharField(
