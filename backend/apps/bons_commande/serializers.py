@@ -87,13 +87,14 @@ class BonCommandeSerializer(serializers.ModelSerializer):
 
 
 class BonCommandeListSerializer(serializers.ModelSerializer):
-    """Serializer allégé pour les listes."""
+    """Serializer allégé pour les listes — inclut les proformas pour les cartes inline."""
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     nb_proformas = serializers.SerializerMethodField()
     created_by_detail = UserSerializer(source="created_by", read_only=True)
     fournisseur_selectionne_detail = FactureProformaSerializer(
         source="fournisseur_selectionne", read_only=True
     )
+    factures_proforma = FactureProformaSerializer(many=True, read_only=True)
 
     class Meta:
         model = BonCommande
@@ -110,6 +111,7 @@ class BonCommandeListSerializer(serializers.ModelSerializer):
             "fiche_id",
             "fournisseur_selectionne",
             "fournisseur_selectionne_detail",
+            "factures_proforma",
             "created_by_detail",
             "created_at",
         ]

@@ -4,7 +4,7 @@ Views pour les Bons de Commande.
 Endpoints:
   GET/POST   /api/bons-commande/
   GET/PUT/PATCH/DELETE /api/bons-commande/{id}/
-  POST /api/bons-commande/{id}/soumettre-daf/   → DRAFT → PENDING_DAF
+  POST /api/bons-commande/{id}/soumettre-daf/   → DRAFT → PENDING_PROFORMA
   POST /api/bons-commande/{id}/approuver-daf/   → PENDING_DAF → PENDING_DG
   POST /api/bons-commande/{id}/rejeter-daf/     → PENDING_DAF → REJECTED
   POST /api/bons-commande/{id}/approuver-dg/    → PENDING_DG → APPROVED

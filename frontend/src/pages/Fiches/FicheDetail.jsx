@@ -325,8 +325,8 @@ const missionCanValidate = (user, m) => {
   const r = user?.role; const rh = user?.is_rh
   if (r === 'ADMIN' || rh) return ['PENDING_MANAGER','PENDING_DAF','PENDING_DG'].includes(m.status)
   if (r === 'MANAGER')     return m.status === 'PENDING_MANAGER'
-  if (r === 'DAF')         return m.status === 'PENDING_DAF'
-  if (r === 'DIRECTOR')    return m.status === 'PENDING_DG'
+  if (r === 'DAF')         return ['PENDING_MANAGER', 'PENDING_DAF'].includes(m.status)
+  if (r === 'DIRECTOR')    return ['PENDING_MANAGER', 'PENDING_DG'].includes(m.status)
   return false
 }
 
@@ -485,24 +485,86 @@ function BonsPaiementSection({ ficheType, ficheId, user, fiche, bonsCommande }) 
             const cfg    = BP_STATUS[bon.status] ?? BP_STATUS.DRAFT
             const isOpen = expanded === bon.id
             const items  = bon.items ?? []
+
+            // Quick-action buttons shown directly on the row (no expand needed)
+            const rowActions = canManage && (
+              <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                {actLoading[bon.id] && (
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-purple-300 border-t-purple-600" />
+                )}
+                {bon.status === 'DRAFT' && !actLoading[bon.id] && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={actLoading[bon.id]}
+                      onClick={() => doAction(bon.id, validateBonPaiement)}
+                      title="Valider le bon"
+                      className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors shadow-sm"
+                    >
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                      </svg>
+                      Valider
+                    </button>
+                    <button
+                      type="button"
+                      disabled={actLoading[bon.id]}
+                      onClick={() => doAction(bon.id, cancelBonPaiement)}
+                      title="Annuler le bon"
+                      className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-lg border border-red-300 text-red-600 bg-white hover:bg-red-50 disabled:opacity-50 transition-colors"
+                    >
+                      Annuler
+                    </button>
+                  </>
+                )}
+                {bon.status === 'VALIDATED' && !actLoading[bon.id] && (
+                  <button
+                    type="button"
+                    disabled={actLoading[bon.id]}
+                    onClick={() => doAction(bon.id, cancelBonPaiement)}
+                    title="Annuler le bon validé"
+                    className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-lg border border-red-300 text-red-600 bg-white hover:bg-red-50 disabled:opacity-50 transition-colors"
+                  >
+                    Annuler
+                  </button>
+                )}
+              </div>
+            )
+
             return (
               <div key={bon.id}>
                 {/* ── Row ── */}
-                <button type="button" onClick={() => setExpanded(isOpen ? null : bon.id)}
-                  className="w-full flex items-center gap-3 px-6 py-3.5 text-left hover:bg-gray-50 transition-colors">
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setExpanded(isOpen ? null : bon.id)}
+                  onKeyDown={(e) => e.key === 'Enter' && setExpanded(isOpen ? null : bon.id)}
+                  className="w-full flex items-center gap-3 px-6 py-3.5 text-left hover:bg-gray-50 transition-colors cursor-pointer select-none"
+                >
                   <span className="font-mono text-xs font-semibold text-gray-700 w-32 flex-shrink-0">{bon.numero}</span>
-                  <span className="flex-1 text-sm text-gray-700 truncate">{bon.beneficiaire || '—'}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-800 font-medium truncate">{bon.beneficiaire || '—'}</p>
+                    {bon.motif && <p className="text-xs text-gray-400 truncate">{bon.motif}</p>}
+                  </div>
                   {bon.montant && (
                     <span className="text-sm font-bold text-gray-900 flex-shrink-0">{formatMontant(bon.montant)}</span>
                   )}
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cfg.color} flex-shrink-0`}>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${cfg.color} flex-shrink-0`}>
                     {cfg.label}
                   </span>
-                  <svg className={`h-4 w-4 text-gray-400 flex-shrink-0 transition-transform ${isOpen ? 'rotate-90' : ''}`}
+                  {rowActions}
+                  <svg className={`h-4 w-4 text-gray-400 flex-shrink-0 transition-transform ml-1 ${isOpen ? 'rotate-90' : ''}`}
                     fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
                   </svg>
-                </button>
+                </div>
+
+                {/* ── Inline error (shows without needing to open) ── */}
+                {actErr[bon.id] && (
+                  <div className="mx-6 mb-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+                    {actErr[bon.id]}
+                  </div>
+                )}
 
                 {/* ── Détails expandables ── */}
                 {isOpen && (
@@ -567,37 +629,10 @@ function BonsPaiementSection({ ficheType, ficheId, user, fiche, bonsCommande }) 
                       </div>
                     )}
 
-                    {/* Erreur + actions */}
-                    {actErr[bon.id] && (
-                      <p className="text-xs text-red-600">{actErr[bon.id]}</p>
-                    )}
-                    <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-purple-100">
-                      {bon.status === 'DRAFT' && canManage && (
-                        <>
-                          <button disabled={actLoading[bon.id]} onClick={() => doAction(bon.id, validateBonPaiement)}
-                            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors">
-                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                            </svg>
-                            Valider
-                          </button>
-                          <button disabled={actLoading[bon.id]} onClick={() => doAction(bon.id, cancelBonPaiement)}
-                            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-red-500 text-white hover:bg-red-600 disabled:opacity-50 transition-colors">
-                            Annuler
-                          </button>
-                        </>
-                      )}
-                      {bon.status === 'VALIDATED' && canManage && (
-                        <button disabled={actLoading[bon.id]} onClick={() => doAction(bon.id, cancelBonPaiement)}
-                          className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-red-500 text-white hover:bg-red-600 disabled:opacity-50 transition-colors">
-                          Annuler
-                        </button>
-                      )}
-                      {actLoading[bon.id] && (
-                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-purple-300 border-t-purple-600" />
-                      )}
+                    {/* Lien détail complet */}
+                    <div className="flex justify-end pt-1 border-t border-purple-100">
                       <Link to={`/bons-paiement/${bon.id}`}
-                        className="inline-flex items-center gap-1 text-xs font-medium text-purple-600 hover:underline ml-auto flex-shrink-0">
+                        className="inline-flex items-center gap-1 text-xs font-medium text-purple-600 hover:underline">
                         Voir le bon complet
                         <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
@@ -1142,7 +1177,9 @@ function MissionsSection({ ficheId, ficheData, user }) {
         {missions.length === 0 && (
           <div className="px-6 py-8 text-center">
             <p className="text-sm text-gray-500">Aucune fiche de mission liée.</p>
-            <p className="text-xs text-gray-400 mt-1">Utilisez le bouton ci-dessus pour créer une mission pour cet agent.</p>
+            {(user?.is_rh || user?.role === 'ADMIN') && (
+              <p className="text-xs text-gray-400 mt-1">Utilisez le bouton ci-dessus pour créer une mission pour cet agent.</p>
+            )}
           </div>
         )}
       </div>
@@ -1936,10 +1973,10 @@ export default function FicheDetail({ type }) {
   const canValidate  = requiredRole && (
     userRole === requiredRole ||
     userRole === 'ADMIN' ||
-    (fiche?.status === 'PENDING_DIRECTOR' && userRole === 'DAF')
+    (ficheType === 'interne' && fiche?.status === 'PENDING_DIRECTOR' && userRole === 'DAF')
   )
 
-  const canExecute     = fiche?.status === 'APPROVED' && hasBcApproved && (userRole === 'DAF' || userRole === 'ADMIN' || user?.is_finance_team === true)
+  const canExecute     = fiche?.status === 'APPROVED' && (userRole === 'DAF' || userRole === 'ADMIN' || user?.is_comptable === true || user?.department?.code === 'AF')
   const canMarkReceived = fiche?.status === 'IN_EXECUTION' && (isOwner || userRole === 'ADMIN')
 
   // Pre-populate BP items from fiche items when opening form
@@ -2270,15 +2307,15 @@ export default function FicheDetail({ type }) {
             <MissionsSection ficheId={Number(id)} ficheData={fiche} user={user} />
           )}
 
-          {/* Warning: fiche approuvée mais aucun BC validé */}
-          {fiche?.status === 'APPROVED' && !hasBcApproved && (userRole === 'DAF' || userRole === 'ADMIN') && (
-            <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 flex items-start gap-3">
-              <svg className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+          {/* Info: fiche approuvée mais aucun BC validé */}
+          {fiche?.status === 'APPROVED' && !hasBcApproved && canExecute && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-3">
+              <svg className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
               </svg>
               <div>
-                <p className="text-sm font-semibold text-amber-800">Bon de commande requis</p>
-                <p className="text-xs text-amber-700 mt-0.5">Un bon de commande doit être approuvé avant d'émettre le bon de paiement.</p>
+                <p className="text-sm font-semibold text-amber-700">Aucun bon de commande approuvé</p>
+                <p className="text-xs text-amber-600 mt-0.5">Vous pouvez émettre le bon de paiement directement, ou créer un bon de commande via la section ci-dessus.</p>
               </div>
             </div>
           )}
