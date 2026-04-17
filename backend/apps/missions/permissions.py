@@ -11,15 +11,15 @@ from apps.accounts.models import Role
 
 
 class CanManageMission(BasePermission):
-    """Tout utilisateur authentifié sauf COLLABORATEUR sans rôle fonctionnel peut accéder aux missions."""
+    """Missions accessibles aux rôles supérieurs et aux utilisateurs RH."""
 
     def has_permission(self, request, view) -> bool:
         if not request.user or not request.user.is_authenticated:
             return False
         if request.user.role != Role.COLLABORATEUR:
             return True
-        # Les collaborateurs avec un rôle fonctionnel (RH, comptable) ont accès
-        return request.user.is_rh or request.user.is_comptable
+        # Parmi les collaborateurs, seuls les RH ont accès aux missions
+        return bool(request.user.is_rh)
 
     def has_object_permission(self, request, view, obj) -> bool:
         if request.method in SAFE_METHODS:

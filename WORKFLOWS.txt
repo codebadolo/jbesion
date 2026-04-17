@@ -1,0 +1,339 @@
+================================================================================
+  DOCUMENTATION DES WORKFLOWS — SYSTÈME DE GESTION DES FICHES DE BESOINS
+  Date : 2026-04-17
+================================================================================
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ROLES UTILISATEURS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  COLLABORATEUR    Employé de base. Crée et suit ses propres fiches.
+  MANAGER          Supérieur hiérarchique. Valide au premier niveau.
+  DAF              Directeur Administratif et Financier. Valide au 2e niveau.
+  DIRECTOR         Directeur Général (DG). Validation finale.
+  ADMIN            Accès complet à tous les modules.
+
+  Flags spéciaux (cumulables avec n'importe quel rôle) :
+  - is_comptable    : gère les Bons de Commande et Bons de Paiement
+  - is_rh           : gère les Fiches de Mission et Absences
+  - is_agent_liaison: peut déclarer ses propres absences
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. FICHE INTERNE  (référence : FI-AAAA-NNNNN)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DESCRIPTION
+  Fiche de besoin interne à l'organisation (acquisition de matériel, fournitures,
+  prestations internes…). Chaque fiche contient une liste d'articles avec
+  désignation, quantité, date requise et montant estimé.
+
+STATUTS POSSIBLES
+  DRAFT                      Brouillon (non soumis)
+  PENDING_MANAGER            En attente du Supérieur Hiérarchique
+  PENDING_DAF                En attente du DAF
+  PENDING_DIRECTOR           En attente du DG
+  PENDING_CLARIFICATION_DAF  Clarification demandée par le DAF
+  PENDING_CLARIFICATION_DIR  Clarification demandée par le DG
+  APPROVED                   Approuvée — prête pour exécution
+  REJECTED                   Rejetée
+  IN_EXECUTION               En cours d'exécution (comptabilité)
+  DELIVERED                  Livrée / Réceptionnée
+
+WORKFLOW PRINCIPAL
+
+  [COLLABORATEUR]
+      Crée la fiche (DRAFT)
+      → Soumet au manager (PENDING_MANAGER)
+
+  [MANAGER]
+      Reçoit la notification
+      → Approuve  → PENDING_DAF
+      → Rejette   → REJECTED  (fin)
+      → Demande clarification → l'auteur répond → retour PENDING_MANAGER
+
+  [DAF]
+      Reçoit la notification
+      → Donne un avis favorable → PENDING_DIRECTOR
+      → Rejette                 → REJECTED  (fin)
+      → Demande clarification   → PENDING_CLARIFICATION_DAF
+          └─ L'auteur répond    → retour PENDING_DAF
+
+  [DIRECTOR / DG]
+      Reçoit la notification
+      → Approuve définitivement → APPROVED
+      → Rejette                 → REJECTED  (fin)
+      → Demande clarification   → PENDING_CLARIFICATION_DIR
+          └─ L'auteur répond    → retour PENDING_DIRECTOR
+
+  [Comptable / DAF / Dép. AF]  — après APPROVED
+      Exécute la fiche (renseigne fournisseur, montant, mode de paiement, facture)
+      → IN_EXECUTION
+      Réceptionne la livraison
+      → DELIVERED  (fin)
+
+NOTES
+  - Chaque action de validation est enregistrée dans le modèle Validation
+    (historique immuable avec rôle, date et commentaire).
+  - Des notifications in-app sont envoyées à chaque changement de statut.
+  - La fiche peut être liée ultérieurement à un Bon de Commande
+    (champ fiche_type / fiche_id sur le BC).
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. FICHE EXTERNE  (référence : FE-AAAA-NNNNN)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DESCRIPTION
+  Fiche de besoin liée à des partenaires ou prestataires externes. Chaque article
+  précise l'affectation (nom du partenaire/prestataire), un montant prestataire
+  et un montant client.
+
+STATUTS POSSIBLES
+  Identiques à la Fiche Interne (voir ci-dessus).
+
+WORKFLOW PRINCIPAL
+
+  [COLLABORATEUR]
+      Crée la fiche (DRAFT)
+      → Soumet au manager (PENDING_MANAGER)
+
+  [MANAGER]
+      → Approuve  → PENDING_DIRECTOR   ← ATTENTION : saute le DAF
+      → Rejette   → REJECTED
+      → Demande clarification → retour après réponse → PENDING_MANAGER
+
+  [DIRECTOR / DG]
+      → Approuve  → APPROVED
+      → Rejette   → REJECTED
+      → Demande clarification → PENDING_CLARIFICATION_DIR
+          └─ Réponse → retour PENDING_DIRECTOR
+
+  [Comptable / DAF / Dép. AF]  — après APPROVED
+      → IN_EXECUTION → DELIVERED
+
+DIFFERENCES AVEC LA FICHE INTERNE
+  - Le DAF n'est PAS dans la chaîne d'approbation des fiches externes.
+    Le workflow passe directement de PENDING_MANAGER à PENDING_DIRECTOR.
+  - Les articles contiennent deux montants (prestataire + client) au lieu d'un seul.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. BON DE COMMANDE  (référence : BC-AAAA-NNNNN)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DESCRIPTION
+  Document émis par le service comptable pour formaliser une commande auprès
+  d'un fournisseur, généralement consécutif à l'approbation d'une Fiche Interne
+  ou Externe. Il peut aussi être créé indépendamment.
+
+  Le DAF sélectionne le fournisseur retenu parmi les factures proforma reçues.
+
+STATUTS POSSIBLES
+  DRAFT             Brouillon
+  PENDING_PROFORMA  En attente des factures proforma
+  PENDING_DAF       En attente de l'approbation du DAF
+  PENDING_DG        En attente de l'approbation du DG
+  APPROVED          Approuvé — exécution autorisée
+  REJECTED          Rejeté
+  IN_EXECUTION      En cours d'exécution
+  DONE              Exécuté / Clôturé
+
+WORKFLOW PRINCIPAL
+
+  [Comptable ou DAF]
+      Crée le bon de commande (DRAFT)
+      → Soumet pour collecte des proformas (PENDING_PROFORMA)
+
+  [Comptable]
+      Uploade les factures proforma des différents fournisseurs
+      (chaque proforma : nom fournisseur, référence, montant, fichier PDF)
+      → Soumet au DAF (PENDING_DAF)
+
+  [DAF]
+      Consulte toutes les proformas
+      → Sélectionne le fournisseur retenu (fournisseur_selectionne)
+      → Approuve → PENDING_DG
+      → Rejette  → REJECTED  (fin)
+      Peut renseigner un commentaire (daf_commentaire)
+
+  [DIRECTOR / DG]
+      → Approuve définitivement → APPROVED
+      → Rejette                 → REJECTED  (fin)
+      Peut renseigner un commentaire (dg_commentaire)
+
+  [Comptable]  — après APPROVED
+      Lance l'exécution → IN_EXECUTION
+      Clôture après livraison → DONE  (fin)
+
+NOTES
+  - Un BC peut être lié à une Fiche Interne ou Externe (champs fiche_type / fiche_id).
+  - Seuls le DAF, le DG, le comptable (is_comptable) et les membres
+    du département AF ont accès à la liste des Bons de Commande.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. BON DE PAIEMENT  (référence : BP-AAAA-NNNNN)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DESCRIPTION
+  Bon de décaissement émis par le service comptable pour régler un fournisseur
+  ou rembourser des frais. Il contient le bénéficiaire, le motif, le montant,
+  le mode de paiement et un tableau de lignes détaillées.
+
+  Modes de paiement : ESPECE (Espèce) ou CHEQUE (Chèque).
+
+STATUTS POSSIBLES
+  DRAFT      Brouillon (en cours de rédaction)
+  VALIDATED  Validé — paiement effectué
+  CANCELLED  Annulé
+
+WORKFLOW PRINCIPAL  (workflow court — 2 étapes)
+
+  [Comptable ou is_comptable]
+      Crée le bon (DRAFT)
+      Renseigne : bénéficiaire, motif, montant, mode de paiement,
+                  montant en lettres, lignes de détail
+      → Valide → VALIDATED  (paiement effectué)
+      → Annule → CANCELLED  (fin)
+
+NOTES
+  - Pas de circuit d'approbation multi-niveaux : le comptable est souverain.
+  - Un BP peut être lié à une Fiche Interne ou Externe (champs fiche_type / fiche_id).
+  - Le montant total de tous les BP en statut VALIDATED est affiché dans
+    le dashboard (indicateur "Montant décaissé").
+  - Seuls le DAF, le DG, le comptable et les membres du département AF
+    ont accès aux Bons de Paiement.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. FICHE DE MISSION  (référence : FM-AAAA-NNNNN)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DESCRIPTION
+  Fiche de frais de mission établie pour un membre du personnel ou un prestataire
+  externe partant en déplacement. Elle détaille les frais (hébergement,
+  restauration, transport, autres) et peut désigner un agent de liaison.
+
+  Peut être liée à une Fiche Externe (fiche_externe_id).
+
+STATUTS POSSIBLES
+  DRAFT            Brouillon
+  PENDING_MANAGER  En attente du Manager
+  PENDING_DAF      En attente du DAF
+  PENDING_DG       En attente du DG
+  APPROVED         Approuvée
+  REJECTED         Rejetée
+  IN_PROGRESS      Mission en cours
+  DONE             Terminée / Clôturée
+
+WORKFLOW PRINCIPAL
+
+  [RH (is_rh) ou ADMIN]
+      Crée la fiche (DRAFT)
+      Si le bénéficiaire est un membre du personnel, le matricule et la
+      fonction sont auto-remplis depuis le compte utilisateur.
+      → Soumet au Manager (PENDING_MANAGER)
+
+  [MANAGER]
+      → Approuve  → PENDING_DAF
+      → Rejette   → REJECTED  (fin)
+
+  [DAF]
+      → Approuve  → PENDING_DG
+      → Rejette   → REJECTED  (fin)
+
+  [DIRECTOR / DG]
+      → Approuve  → APPROVED
+      → Rejette   → REJECTED  (fin)
+
+  [RH / ADMIN]  — après APPROVED
+      Démarre la mission → IN_PROGRESS
+      Clôture à la fin   → DONE  (fin)
+
+NOTES
+  - Seuls le RH (is_rh), les MANAGER, DAF, DIRECTOR et ADMIN voient
+    la liste complète des missions.
+  - Un agent de liaison peut être affecté à la mission (champ agent_liaison).
+  - Le total des frais (hebergement + restauration + transport + autres)
+    est calculé dynamiquement par la propriété total_frais.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. ABSENCE AGENT DE LIAISON
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DESCRIPTION
+  Signalement d'absence soumis par un agent de liaison (is_agent_liaison = True)
+  quand il est en déplacement pour le compte de l'entreprise. Peut être lié à
+  une Fiche de Mission.
+
+MOTIFS
+  MISSION    Déplacement mission
+  FORMATION  Formation / Cours
+  ACTIVITE   Activité extérieure entreprise
+  AUTRE      Autre
+
+STATUTS POSSIBLES
+  DECLARED   Déclarée (en attente de validation)
+  VALIDATED  Validée
+  CANCELLED  Annulée
+
+WORKFLOW PRINCIPAL  (workflow court)
+
+  [Agent de liaison — is_agent_liaison]
+      Déclare son absence (DECLARED)
+      Précise : date début, date fin, motif, description
+      Peut lier à une Fiche de Mission
+
+  [MANAGER / DAF / DIRECTOR / ADMIN]
+      → Valide  → VALIDATED
+      → Annule  → CANCELLED
+
+NOTES
+  - Seuls les utilisateurs avec is_agent_liaison = True peuvent
+    déclarer des absences (bouton masqué pour les autres).
+  - Les managers et l'encadrement peuvent valider ou annuler.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SYNTHÈSE — QUI FAIT QUOI ?
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Action                          | Qui peut le faire
+  --------------------------------|--------------------------------------------
+  Créer une Fiche Interne/Externe | Tout utilisateur connecté
+  Soumettre une fiche             | Le créateur (tant que DRAFT)
+  Valider niveau Manager          | MANAGER, ADMIN
+  Valider niveau DAF              | DAF, ADMIN
+  Valider niveau DG               | DIRECTOR, ADMIN
+  Exécuter une fiche approuvée    | Comptable (is_comptable), DAF, dép. AF, ADMIN
+  Créer un Bon de Commande        | Comptable, DAF, ADMIN
+  Uploader des proformas          | Comptable, ADMIN
+  Approuver BC (DAF)              | DAF, ADMIN
+  Approuver BC (DG)               | DIRECTOR, ADMIN
+  Créer un Bon de Paiement        | Comptable (is_comptable), ADMIN
+  Valider / Annuler un BP         | Comptable, DAF, ADMIN
+  Créer une Fiche de Mission      | RH (is_rh), ADMIN
+  Valider une Fiche de Mission    | MANAGER, DAF, DIRECTOR, ADMIN, RH
+  Déclarer une absence            | Agent de liaison (is_agent_liaison) uniquement
+  Valider une absence             | MANAGER, DAF, DIRECTOR, ADMIN
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+NUMÉROTATION AUTOMATIQUE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Type               Format              Exemple
+  -------------------|--------------------|-----------------
+  Fiche Interne      FI-AAAA-NNNNN       FI-2026-00042
+  Fiche Externe      FE-AAAA-NNNNN       FE-2026-00007
+  Bon de Commande    BC-AAAA-NNNNN       BC-2026-00015
+  Bon de Paiement    BP-AAAA-NNNNN       BP-2026-00031
+  Fiche de Mission   FM-AAAA-NNNNN       FM-2026-00003
+  Utilisateur        MAT-AAAA-NNNNN      MAT-2026-00001
+
+  AAAA = année en cours, NNNNN = ID de la base de données sur 5 chiffres.
+
+================================================================================

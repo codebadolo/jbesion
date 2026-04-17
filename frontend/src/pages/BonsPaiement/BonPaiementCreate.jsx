@@ -11,6 +11,7 @@ import {
   clearCurrent,
   clearError,
 } from '../../store/bonsPaiementSlice.js'
+import { montantEnLettres } from '../../utils/helpers.js'
 
 const MODES = [
   { value: 'ESPECE',  label: 'Espèce' },
@@ -58,12 +59,26 @@ export default function BonPaiementCreate() {
         notes:           current.notes || '',
       })
       setItems(current.items?.length ? current.items.map((i) => ({ designation: i.designation, montant: String(i.montant) })) : [emptyItem()])
+      // Si le bon a déjà un montant en lettres saisi, on considère que c'est manuel
+      setLettresManual(Boolean(current.montant_lettres))
     }
   }, [current, isEdit, id])
 
   const total = items.reduce((acc, i) => acc + (parseFloat(i.montant) || 0), 0)
 
-  const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
+  // Auto-fill montant_lettres whenever total changes, unless the user has manually edited it
+  const [lettresManual, setLettresManual] = useState(false)
+  useEffect(() => {
+    if (!lettresManual) {
+      setForm((f) => ({ ...f, montant_lettres: total > 0 ? montantEnLettres(total) : '' }))
+    }
+  }, [total, lettresManual])
+
+  const set = (field) => (e) => {
+    const value = e.target.value
+    if (field === 'montant_lettres') setLettresManual(true)
+    setForm((f) => ({ ...f, [field]: value }))
+  }
 
   const setItem = (idx, field) => (e) => {
     setItems((prev) => prev.map((item, i) => i === idx ? { ...item, [field]: e.target.value } : item))
@@ -241,14 +256,28 @@ export default function BonPaiementCreate() {
         {/* Montant en lettres + Notes */}
         <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm space-y-4">
           <div>
-            <label className="form-label">Montant en lettres</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="form-label mb-0">Montant en lettres</label>
+              {lettresManual && (
+                <button
+                  type="button"
+                  onClick={() => { setLettresManual(false); setForm((f) => ({ ...f, montant_lettres: total > 0 ? montantEnLettres(total) : '' })) }}
+                  className="text-xs text-blue-600 hover:underline"
+                >
+                  ↺ Regénérer automatiquement
+                </button>
+              )}
+            </div>
             <input
               type="text"
               value={form.montant_lettres}
               onChange={set('montant_lettres')}
-              placeholder="Ex : Deux mille cinq cents francs CFA"
-              className="form-input"
+              placeholder="Généré automatiquement depuis le total…"
+              className={`form-input ${!lettresManual && total > 0 ? 'bg-blue-50 border-blue-200' : ''}`}
             />
+            {!lettresManual && total > 0 && (
+              <p className="mt-1 text-xs text-blue-500">Généré automatiquement — modifiez pour personnaliser</p>
+            )}
           </div>
           <div>
             <label className="form-label">Notes / Observations</label>

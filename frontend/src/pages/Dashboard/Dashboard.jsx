@@ -355,9 +355,14 @@ export default function Dashboard() {
   if (loading) return <LoadingSpinner message="Chargement du tableau de bord..." />
 
   // ── Derived data ──────────────────────────────────────────────────────────
-  const ci = data?.counts_interne || {}
-  const ce = data?.counts_externe || {}
-  const total = data?.total_fiches || {}
+  const ci  = data?.counts_interne       || {}
+  const ce  = data?.counts_externe       || {}
+  const cbc = data?.counts_bons_commande || {}
+  const cbp = data?.counts_bons_paiement || {}
+  const cm  = data?.counts_missions      || {}
+  const ca  = data?.counts_absences      || {}
+
+  const total        = data?.total_fiches || {}
   const pendingForMe = data?.pending_for_me || {}
   const recentFiches = data?.recent_fiches || []
   const monthlyStats = (data?.monthly_stats || []).map((m) => ({
@@ -368,9 +373,13 @@ export default function Dashboard() {
   const pendingInterne = (ci.PENDING_MANAGER || 0) + (ci.PENDING_DAF || 0) + (ci.PENDING_DIRECTOR || 0)
   const pendingExterne = (ce.PENDING_MANAGER || 0) + (ce.PENDING_DIRECTOR || 0)
 
-  const isComptable = user?.is_comptable || false
-  const isRH        = user?.is_rh || false
-  const isEmployee  = userRole === 'COLLABORATEUR' && !isComptable && !isRH
+  const isComptable    = user?.is_comptable     || false
+  const isRH           = user?.is_rh            || false
+  const isAgentLiaison = user?.is_agent_liaison || false
+  const isEmployee     = userRole === 'COLLABORATEUR' && !isComptable && !isRH
+  const canSeeBCBP     = ['DAF','DIRECTOR','ADMIN'].includes(userRole) || isComptable || user?.department?.code === 'AF'
+  const canSeeMissions = ['MANAGER','DAF','DIRECTOR','ADMIN'].includes(userRole) || isRH
+  const canSeeAbsences = ['MANAGER','DAF','DIRECTOR','ADMIN'].includes(userRole) || isRH || isAgentLiaison
 
   // Labels personnalisés selon le rôle
   const totalLabel    = isEmployee ? 'Mes fiches'          : 'Total fiches'
@@ -388,44 +397,89 @@ export default function Dashboard() {
       { label: rejectedLabel, value: (ci.REJECTED || 0) + (ce.REJECTED || 0), icon: iconX,     bgColor: CARD_BG_COLORS[3] },
     ],
     interne: [
-      { label: interneLabel,  value: total.internes,  icon: iconDoc,   bgColor: CARD_BG_COLORS[0] },
-      { label: pendingLabel,  value: pendingInterne,  icon: iconClock, bgColor: CARD_BG_COLORS[1] },
+      { label: interneLabel,  value: total.internes,   icon: iconDoc,   bgColor: CARD_BG_COLORS[0] },
+      { label: pendingLabel,  value: pendingInterne,   icon: iconClock, bgColor: CARD_BG_COLORS[1] },
       { label: approvedLabel, value: ci.APPROVED || 0, icon: iconCheck, bgColor: CARD_BG_COLORS[2] },
       { label: rejectedLabel, value: ci.REJECTED || 0, icon: iconX,     bgColor: CARD_BG_COLORS[3] },
     ],
     externe: [
-      { label: externeLabel,  value: total.externes,  icon: iconGlobe,  bgColor: CARD_BG_COLORS[0] },
-      { label: pendingLabel,  value: pendingExterne,  icon: iconClock,  bgColor: CARD_BG_COLORS[1] },
+      { label: externeLabel,  value: total.externes,   icon: iconGlobe,  bgColor: CARD_BG_COLORS[0] },
+      { label: pendingLabel,  value: pendingExterne,   icon: iconClock,  bgColor: CARD_BG_COLORS[1] },
       { label: approvedLabel, value: ce.APPROVED || 0, icon: iconCheck, bgColor: CARD_BG_COLORS[2] },
       { label: rejectedLabel, value: ce.REJECTED || 0, icon: iconX,     bgColor: CARD_BG_COLORS[3] },
     ],
   }
 
+  // BC/BP stat cards
+  const pendingBC = (cbc.PENDING_DAF || 0) + (cbc.PENDING_DG || 0)
+  const montantBP = data?.montant_bp_valides || 0
+  const statsBCBP = [
+    { label: 'Bons de commande',  value: data?.total_bons_commande ?? 0,
+      sub: `${cbc.APPROVED || 0} approuvés · ${cbc.IN_EXECUTION || 0} en cours`,
+      icon: iconBC, bgColor: 'bg-[#14532d]' },
+    { label: 'BC en attente',     value: pendingBC,
+      sub: `${cbc.PENDING_DAF || 0} att. DAF · ${cbc.PENDING_DG || 0} att. DG`,
+      icon: iconClock, bgColor: 'bg-[#1e4620]' },
+    { label: 'Bons de paiement',  value: data?.total_bons_paiement ?? 0,
+      sub: `${cbp.VALIDATED || 0} validés · ${cbp.DRAFT || 0} brouillons`,
+      icon: iconBP, bgColor: 'bg-[#3b1d6e]' },
+    { label: 'Montant décaissé',  value: montantBP > 0 ? `${montantBP.toLocaleString('fr-FR')} F` : '0 F',
+      sub: 'Bons de paiement validés',
+      icon: iconMoney, bgColor: 'bg-[#2d1a4a]' },
+  ]
+
+  // Mission stat cards
+  const pendingMissions = (cm.PENDING_MANAGER || 0) + (cm.PENDING_DAF || 0) + (cm.PENDING_DG || 0)
+  const statsMissions = [
+    { label: 'Total missions',    value: data?.total_missions ?? 0,
+      sub: `${cm.APPROVED || 0} approuvées · ${cm.DONE || 0} terminées`,
+      icon: iconMission, bgColor: 'bg-[#7c2d12]' },
+    { label: 'Missions en attente', value: pendingMissions,
+      sub: `${cm.PENDING_MANAGER || 0} mgr · ${cm.PENDING_DAF || 0} DAF · ${cm.PENDING_DG || 0} DG`,
+      icon: iconClock, bgColor: 'bg-[#92400e]' },
+    { label: 'En cours',          value: (cm.IN_PROGRESS || 0),
+      sub: `${cm.REJECTED || 0} rejetées`,
+      icon: iconCheck, bgColor: 'bg-[#78350f]' },
+  ]
+
+  // Absence stat cards
+  const statsAbsences = [
+    { label: 'Total absences',     value: data?.total_absences ?? 0,
+      sub: `${ca.VALIDATED || 0} validées · ${ca.CANCELLED || 0} annulées`,
+      icon: iconAbsence, bgColor: 'bg-[#1e3a5f]' },
+    { label: 'En attente',         value: ca.DECLARED || 0,
+      sub: 'Absences déclarées à valider',
+      icon: iconClock, bgColor: 'bg-[#1e4a7a]' },
+    { label: 'Actives aujourd\'hui', value: data?.absences_actives ?? 0,
+      sub: 'Agents absents en ce moment',
+      icon: iconCheck, bgColor: 'bg-[#163d6e]' },
+  ]
+
   // Bar chart: status distribution
   const statusBarData = view === 'externe'
     ? [
-        { name: 'Brouillon',        value: ce.DRAFT || 0 },
-        { name: 'Att. Manager',     value: ce.PENDING_MANAGER || 0 },
-        { name: 'Att. Directeur',   value: ce.PENDING_DIRECTOR || 0 },
-        { name: 'Approuvées',       value: ce.APPROVED || 0 },
-        { name: 'Rejetées',         value: ce.REJECTED || 0 },
+        { name: 'Brouillon',      value: ce.DRAFT || 0 },
+        { name: 'Att. Manager',   value: ce.PENDING_MANAGER || 0 },
+        { name: 'Att. Directeur', value: ce.PENDING_DIRECTOR || 0 },
+        { name: 'Approuvées',     value: ce.APPROVED || 0 },
+        { name: 'Rejetées',       value: ce.REJECTED || 0 },
       ]
     : view === 'interne'
     ? [
-        { name: 'Brouillon',        value: ci.DRAFT || 0 },
-        { name: 'Att. Manager',     value: ci.PENDING_MANAGER || 0 },
-        { name: 'Att. DAF',         value: ci.PENDING_DAF || 0 },
-        { name: 'Att. Directeur',   value: ci.PENDING_DIRECTOR || 0 },
-        { name: 'Approuvées',       value: ci.APPROVED || 0 },
-        { name: 'Rejetées',         value: ci.REJECTED || 0 },
+        { name: 'Brouillon',      value: ci.DRAFT || 0 },
+        { name: 'Att. Manager',   value: ci.PENDING_MANAGER || 0 },
+        { name: 'Att. DAF',       value: ci.PENDING_DAF || 0 },
+        { name: 'Att. Directeur', value: ci.PENDING_DIRECTOR || 0 },
+        { name: 'Approuvées',     value: ci.APPROVED || 0 },
+        { name: 'Rejetées',       value: ci.REJECTED || 0 },
       ]
     : [
-        { name: 'Brouillon',        int: ci.DRAFT || 0,            ext: ce.DRAFT || 0 },
-        { name: 'Att. Manager',     int: ci.PENDING_MANAGER || 0,  ext: ce.PENDING_MANAGER || 0 },
-        { name: 'Att. DAF',         int: ci.PENDING_DAF || 0,      ext: 0 },
-        { name: 'Att. Directeur',   int: ci.PENDING_DIRECTOR || 0, ext: ce.PENDING_DIRECTOR || 0 },
-        { name: 'Approuvées',       int: ci.APPROVED || 0,         ext: ce.APPROVED || 0 },
-        { name: 'Rejetées',         int: ci.REJECTED || 0,         ext: ce.REJECTED || 0 },
+        { name: 'Brouillon',      int: ci.DRAFT || 0,            ext: ce.DRAFT || 0 },
+        { name: 'Att. Manager',   int: ci.PENDING_MANAGER || 0,  ext: ce.PENDING_MANAGER || 0 },
+        { name: 'Att. DAF',       int: ci.PENDING_DAF || 0,      ext: 0 },
+        { name: 'Att. Directeur', int: ci.PENDING_DIRECTOR || 0, ext: ce.PENDING_DIRECTOR || 0 },
+        { name: 'Approuvées',     int: ci.APPROVED || 0,         ext: ce.APPROVED || 0 },
+        { name: 'Rejetées',       int: ci.REJECTED || 0,         ext: ce.REJECTED || 0 },
       ]
 
   const BAR_COLORS = [C_MID, '#64B5F6', '#FFA726', '#FB8C00', '#43A047', '#E53935']
@@ -471,6 +525,42 @@ export default function Dashboard() {
           <StatCard key={s.label} {...s} />
         ))}
       </div>
+
+      {/* ── BC/BP stat cards ─────────────────────────────────────────────── */}
+      {canSeeBCBP && (
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Bons de Commande &amp; Paiement</p>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {statsBCBP.map((s) => (
+              <StatCard key={s.label} {...s} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Missions stat cards ───────────────────────────────────────────── */}
+      {canSeeMissions && (
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Missions</p>
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+            {statsMissions.map((s) => (
+              <StatCard key={s.label} {...s} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Absences stat cards ───────────────────────────────────────────── */}
+      {canSeeAbsences && (
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Absences agents</p>
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+            {statsAbsences.map((s) => (
+              <StatCard key={s.label} {...s} />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Charts row (masqué pour les collaborateurs) ───────────────────── */}
       {canSeeCharts && <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
@@ -637,6 +727,62 @@ export default function Dashboard() {
                       </span>
                     </Link>
                   )}
+                  {pendingForMe.bons_commande_daf > 0 && (
+                    <Link
+                      to="/bons-commande"
+                      className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-all group"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">Bons de commande</p>
+                        <p className="text-xs text-gray-500">En attente — validation DAF</p>
+                      </div>
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: '#059669' }}>
+                        {pendingForMe.bons_commande_daf}
+                      </span>
+                    </Link>
+                  )}
+                  {pendingForMe.bons_commande_dg > 0 && (
+                    <Link
+                      to="/bons-commande"
+                      className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-all group"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">Bons de commande</p>
+                        <p className="text-xs text-gray-500">En attente — validation DG</p>
+                      </div>
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: '#047857' }}>
+                        {pendingForMe.bons_commande_dg}
+                      </span>
+                    </Link>
+                  )}
+                  {pendingForMe.missions > 0 && (
+                    <Link
+                      to="/missions"
+                      className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-all group"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">Missions</p>
+                        <p className="text-xs text-gray-500">En attente de votre validation</p>
+                      </div>
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: '#d97706' }}>
+                        {pendingForMe.missions}
+                      </span>
+                    </Link>
+                  )}
+                  {pendingForMe.absences > 0 && (
+                    <Link
+                      to="/missions/absences"
+                      className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-all group"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">Absences</p>
+                        <p className="text-xs text-gray-500">Déclarées — en attente de validation</p>
+                      </div>
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: '#1d4ed8' }}>
+                        {pendingForMe.absences}
+                      </span>
+                    </Link>
+                  )}
                 </>
               )}
             </div>
@@ -694,18 +840,20 @@ export default function Dashboard() {
                     </div>
                     <p className="text-sm font-medium text-gray-700">Bons de Commande</p>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => navigate('/missions')}
-                    className="flex w-full items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-gray-200 hover:bg-gray-50 transition-all text-left"
-                  >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg flex-shrink-0" style={{ backgroundColor: 'rgba(245,158,11,0.08)', color: '#d97706' }}>
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
-                      </svg>
-                    </div>
-                    <p className="text-sm font-medium text-gray-700">Missions</p>
-                  </button>
+                  {isRH && (
+                    <button
+                      type="button"
+                      onClick={() => navigate('/missions')}
+                      className="flex w-full items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-gray-200 hover:bg-gray-50 transition-all text-left"
+                    >
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg flex-shrink-0" style={{ backgroundColor: 'rgba(245,158,11,0.08)', color: '#d97706' }}>
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+                        </svg>
+                      </div>
+                      <p className="text-sm font-medium text-gray-700">Missions</p>
+                    </button>
+                  )}
                 </>
               )}
               {isRH && !isComptable && (
@@ -720,6 +868,20 @@ export default function Dashboard() {
                     </svg>
                   </div>
                   <p className="text-sm font-medium text-gray-700">Missions</p>
+                </button>
+              )}
+              {(isAgentLiaison || isRH || ['MANAGER','DAF','DIRECTOR','ADMIN'].includes(userRole)) && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/missions/absences')}
+                  className="flex w-full items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-gray-200 hover:bg-gray-50 transition-all text-left"
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg flex-shrink-0" style={{ backgroundColor: 'rgba(29,78,216,0.08)', color: '#1d4ed8' }}>
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                    </svg>
+                  </div>
+                  <p className="text-sm font-medium text-gray-700">Absences agents</p>
                 </button>
               )}
             </div>
@@ -756,5 +918,30 @@ const iconGlobe = (
   <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round"
       d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418" />
+  </svg>
+)
+const iconBC = (
+  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007Z" />
+  </svg>
+)
+const iconBP = (
+  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75" />
+  </svg>
+)
+const iconMoney = (
+  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+  </svg>
+)
+const iconMission = (
+  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+  </svg>
+)
+const iconAbsence = (
+  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
   </svg>
 )

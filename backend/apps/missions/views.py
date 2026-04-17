@@ -61,7 +61,7 @@ class FicheMissionViewSet(viewsets.ModelViewSet):
 
         # Restriction par rôle
         if user.role in (Role.DIRECTOR, Role.DAF, Role.ADMIN) or user.is_staff or user.is_rh:
-            return qs
+            return qs  # Visibilité totale
         if user.role == Role.MANAGER:
             return qs.filter(
                 created_by__in=list(user.subordinates.values_list("id", flat=True)) + [user.id]

@@ -10,7 +10,7 @@ from datetime import date
 from django.utils import timezone
 
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import QuerySet, Count, Q
+from django.db.models import QuerySet, Count, Q, Sum
 from django.db.models.functions import TruncMonth
 from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
@@ -1147,10 +1147,14 @@ class DashboardView(APIView):
     GET /api/dashboard/stats/
 
     Returns:
-      - counts_interne : FicheInterne counts per status
-      - counts_externe : FicheExterne counts per status
-      - pending_for_me : fiches waiting for the current user's role
-      - total_fiches   : combined totals
+      - counts_interne       : FicheInterne counts per status
+      - counts_externe       : FicheExterne counts per status
+      - counts_bons_commande : BonCommande counts per status (comptable/DAF/DIRECTOR/ADMIN)
+      - counts_bons_paiement : BonPaiement counts per status (comptable/DAF/ADMIN)
+      - counts_missions      : FicheMission counts per status (manager/DAF/DIRECTOR/ADMIN/RH)
+      - montant_bp_valides   : total amount of validated payment vouchers
+      - pending_for_me       : fiches/BC/missions waiting for the current user's role
+      - total_fiches         : combined totals
     """
 
     permission_classes = [IsAuthenticated]
@@ -1276,14 +1280,162 @@ class DashboardView(APIView):
         total_internes = fi_qs.count()
         total_externes = fe_qs.count()
 
+        # ------------------------------------------------------------------
+        # Bons de Commande stats
+        # ------------------------------------------------------------------
+        from apps.bons_commande.models import BonCommande, BonCommandeStatus
+        from apps.bons_paiement.models import BonPaiement, BonPaiementStatus
+        from apps.missions.models import FicheMission, FicheMissionStatus
+
+        can_see_bc_bp = (
+            user.role in (Role.DAF, Role.DIRECTOR, Role.ADMIN)
+            or user.is_comptable
+            or (user.department and user.department.code == "AF")
+        )
+        can_see_missions = (
+            user.role in (Role.DAF, Role.DIRECTOR, Role.ADMIN, Role.MANAGER)
+            or user.is_rh
+        )
+
+        if can_see_bc_bp:
+            bc_qs = BonCommande.objects.all()
+            counts_bc = {s.value: 0 for s in BonCommandeStatus}
+            for row in bc_qs.values("status").annotate(cnt=Count("id")):
+                counts_bc[row["status"]] = row["cnt"]
+            total_bc = bc_qs.count()
+
+            bp_qs = BonPaiement.objects.all()
+            counts_bp = {s.value: 0 for s in BonPaiementStatus}
+            for row in bp_qs.values("status").annotate(cnt=Count("id")):
+                counts_bp[row["status"]] = row["cnt"]
+            montant_bp_valides = float(
+                bp_qs.filter(status=BonPaiementStatus.VALIDATED)
+                .aggregate(total=Sum("montant"))["total"] or 0
+            )
+            total_bp = bp_qs.count()
+        else:
+            counts_bc = {}
+            counts_bp = {}
+            montant_bp_valides = 0
+            total_bc = 0
+            total_bp = 0
+
+        # ------------------------------------------------------------------
+        # Missions stats
+        # ------------------------------------------------------------------
+        if can_see_missions:
+            mission_qs = FicheMission.objects.all()
+            counts_missions = {s.value: 0 for s in FicheMissionStatus}
+            for row in mission_qs.values("status").annotate(cnt=Count("id")):
+                counts_missions[row["status"]] = row["cnt"]
+            total_missions = mission_qs.count()
+        else:
+            counts_missions = {}
+            total_missions = 0
+
+        # ------------------------------------------------------------------
+        # Pending BC & missions for the current user
+        # ------------------------------------------------------------------
+        pending_bc_daf = 0
+        pending_bc_dg = 0
+        if user.role in (Role.DAF, Role.ADMIN):
+            pending_bc_daf = BonCommande.objects.filter(
+                status=BonCommandeStatus.PENDING_DAF
+            ).count()
+        if user.role in (Role.DIRECTOR, Role.ADMIN):
+            pending_bc_dg = BonCommande.objects.filter(
+                status=BonCommandeStatus.PENDING_DG
+            ).count()
+
+        pending_missions_for_me = 0
+        if user.role == Role.MANAGER:
+            pending_missions_for_me = FicheMission.objects.filter(
+                status=FicheMissionStatus.PENDING_MANAGER
+            ).count()
+        elif user.role == Role.DAF:
+            pending_missions_for_me = FicheMission.objects.filter(
+                status=FicheMissionStatus.PENDING_DAF
+            ).count()
+        elif user.role == Role.DIRECTOR:
+            pending_missions_for_me = FicheMission.objects.filter(
+                status=FicheMissionStatus.PENDING_DG
+            ).count()
+        elif user.role == Role.ADMIN or user.is_rh:
+            pending_missions_for_me = FicheMission.objects.filter(
+                status__in=[
+                    FicheMissionStatus.PENDING_MANAGER,
+                    FicheMissionStatus.PENDING_DAF,
+                    FicheMissionStatus.PENDING_DG,
+                ]
+            ).count()
+
+        # ------------------------------------------------------------------
+        # Absences
+        # ------------------------------------------------------------------
+        from apps.missions.models import AbsenceAgent, AbsenceStatus
+        from django.utils import timezone as tz
+
+        can_see_absences = (
+            user.role in (Role.DAF, Role.DIRECTOR, Role.ADMIN, Role.MANAGER)
+            or user.is_rh
+            or user.is_agent_liaison
+        )
+
+        if can_see_absences:
+            absence_qs = AbsenceAgent.objects.all()
+            if user.is_agent_liaison and user.role not in (Role.MANAGER, Role.DAF, Role.DIRECTOR, Role.ADMIN) and not user.is_rh:
+                absence_qs = absence_qs.filter(agent=user)
+
+            counts_absences_rows = (
+                absence_qs
+                .values("status")
+                .annotate(cnt=Count("id"))
+            )
+            counts_absences = {}
+            for row in counts_absences_rows:
+                counts_absences[row["status"]] = row["cnt"]
+            total_absences = absence_qs.count()
+
+            today = tz.now().date()
+            absences_actives = AbsenceAgent.objects.filter(
+                status=AbsenceStatus.VALIDATED,
+                date_debut__lte=today,
+                date_fin__gte=today,
+            ).count()
+
+            pending_absences = counts_absences.get(AbsenceStatus.DECLARED, 0)
+        else:
+            counts_absences = {}
+            total_absences = 0
+            absences_actives = 0
+            pending_absences = 0
+
         return Response(
             {
                 "counts_interne": counts_interne,
                 "counts_externe": counts_externe,
+                "counts_bons_commande": counts_bc,
+                "counts_bons_paiement": counts_bp,
+                "counts_missions": counts_missions,
+                "counts_absences": counts_absences,
+                "montant_bp_valides": montant_bp_valides,
+                "total_bons_commande": total_bc,
+                "total_bons_paiement": total_bp,
+                "total_missions": total_missions,
+                "total_absences": total_absences,
+                "absences_actives": absences_actives,
                 "pending_for_me": {
                     "fiches_internes": pending_interne_count,
                     "fiches_externes": pending_externe_count,
-                    "total": pending_interne_count + pending_externe_count,
+                    "bons_commande_daf": pending_bc_daf,
+                    "bons_commande_dg": pending_bc_dg,
+                    "missions": pending_missions_for_me,
+                    "absences": pending_absences,
+                    "total": (
+                        pending_interne_count + pending_externe_count
+                        + pending_bc_daf + pending_bc_dg
+                        + pending_missions_for_me + pending_absences
+                    ),
                 },
                 "total_fiches": {
                     "internes": total_internes,
