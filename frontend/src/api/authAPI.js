@@ -18,7 +18,7 @@ export const getCurrentUser = () =>
  */
 export const refreshToken = (refresh) =>
   axiosInstance
-    .post('/auth/token/refresh/', { refresh })
+    .post('/auth/refresh/', { refresh })
     .then((r) => r.data)
 
 /**

@@ -77,10 +77,21 @@ class AuthViewSet(viewsets.ViewSet):
     def refresh(self, request: Request) -> Response:
         """
         Accepts {"refresh": "<token>"} and returns a new access token.
-        Delegates to simplejwt's TokenRefreshView logic.
         """
-        view = TokenRefreshView.as_view()
-        return view(request._request)
+        refresh_token = request.data.get("refresh")
+        if not refresh_token:
+            return Response(
+                {"detail": "Le token de rafraîchissement est requis."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            token = RefreshToken(refresh_token)
+            return Response({"access": str(token.access_token)}, status=status.HTTP_200_OK)
+        except Exception:
+            return Response(
+                {"detail": "Token de rafraîchissement invalide ou expiré."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
 
     # ------------------------------------------------------------------
     # POST /api/auth/logout/

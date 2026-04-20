@@ -75,10 +75,38 @@ export default function App() {
           <Route path="bons-commande" element={<BonsCommandeList />} />
           <Route path="bons-commande/create" element={<BonCommandeCreate />} />
           <Route path="bons-commande/:id" element={<BonCommandeDetail />} />
-          <Route path="missions" element={<FichesMissionList />} />
-          <Route path="missions/create" element={<FicheMissionCreate />} />
-          <Route path="missions/:id" element={<FicheMissionDetail />} />
-          <Route path="missions/absences" element={<AbsencesList />} />
+          <Route
+            path="missions"
+            element={
+              <ProtectedRoute check={(u) => u?.role !== 'COLLABORATEUR' || u?.is_rh}>
+                <FichesMissionList />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="missions/create"
+            element={
+              <ProtectedRoute check={(u) => u?.role !== 'COLLABORATEUR' || u?.is_rh}>
+                <FicheMissionCreate />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="missions/:id"
+            element={
+              <ProtectedRoute check={(u) => u?.role !== 'COLLABORATEUR' || u?.is_rh}>
+                <FicheMissionDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="missions/absences"
+            element={
+              <ProtectedRoute check={(u) => u?.role !== 'COLLABORATEUR' || u?.is_rh}>
+                <AbsencesList />
+              </ProtectedRoute>
+            }
+          />
         </Route>
 
         {/* 404 */}
