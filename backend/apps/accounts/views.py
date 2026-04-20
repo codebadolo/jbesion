@@ -44,7 +44,7 @@ class AuthViewSet(viewsets.ViewSet):
     """
 
     def get_permissions(self):
-        if self.action in ("login",):
+        if self.action in ("login", "refresh"):
             return [AllowAny()]
         return [IsAuthenticated()]
 
