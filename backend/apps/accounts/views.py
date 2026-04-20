@@ -7,6 +7,7 @@ Covers:
 """
 
 from django.contrib.auth import update_session_auth_hash
+from django.db.models import ProtectedError
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -226,12 +227,24 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def destroy(self, request: Request, *args, **kwargs) -> Response:
-        """Prevent deleting your own account."""
+        """Prevent deleting your own account or a user referenced by other records."""
         instance: User = self.get_object()
         if instance == request.user:
             return Response(
                 {"detail": "Vous ne pouvez pas supprimer votre propre compte."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        self.perform_destroy(instance)
+        try:
+            self.perform_destroy(instance)
+        except ProtectedError:
+            return Response(
+                {
+                    "detail": (
+                        "Impossible de supprimer cet utilisateur car il est référencé par "
+                        "des fiches, validations ou missions existantes. "
+                        "Désactivez le compte plutôt que de le supprimer."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         return Response(status=status.HTTP_204_NO_CONTENT)
