@@ -29,10 +29,13 @@ CORS_ALLOW_ALL_ORIGINS = True
 # )
 
 # ---------------------------------------------------------------------------
-# Email — print to console while developing
+# Email — SMTP si EMAIL_HOST_USER est défini, sinon console
 # ---------------------------------------------------------------------------
 
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+if env("EMAIL_HOST_USER", default=""):  # noqa: F405
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 # ---------------------------------------------------------------------------
 # DRF  — add browsable API renderer in development
