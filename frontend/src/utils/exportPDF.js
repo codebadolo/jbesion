@@ -343,27 +343,15 @@ export async function exportFichePDF(fiche, type) {
   doc.save(filename)
 }
 
-// ---------------------------------------------------------------------------
-// Bon de Paiement PDF
-// ---------------------------------------------------------------------------
-export async function exportBonPaiementPDF(bon) {
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-  const pageW = doc.internal.pageSize.getWidth()
-  const pageH = doc.internal.pageSize.getHeight()
-  const margin = 14
+// ── Private helpers shared by all three export functions ───────────────────
 
-  const [headerLogo, headerDeco] = await Promise.all([
-    loadImageAsBase64(headerLogoUrl),
-    loadImageAsBase64(headerDecoUrl),
-  ])
-
+function _drawPageBackground(doc, { pageW, pageH, headerLogo, headerDeco, margin }) {
   if (headerDeco) {
     doc.saveGraphicsState()
     doc.setGState(new doc.GState({ opacity: 0.06 }))
     doc.addImage(headerDeco, 'PNG', 0, 0, pageW, pageH)
     doc.restoreGraphicsState()
   }
-
   const headerH = 29
   if (headerLogo) {
     doc.addImage(headerLogo, 'PNG', 0, 0, pageW, headerH)
@@ -375,79 +363,231 @@ export async function exportBonPaiementPDF(bon) {
     doc.setFont('helvetica', 'bold')
     doc.text('JoFé Digital SARL', margin, 18)
   }
+  return headerH
+}
 
+function _drawTitleBand(doc, { pageW, margin, title, numero, date, headerH }) {
   const bandY = headerH
   doc.setFillColor(...BRAND_DEEP)
   doc.rect(0, bandY, pageW, 9, 'F')
   doc.setTextColor(255, 255, 255)
   doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
-  doc.text('BON DE PAIEMENT', pageW / 2, bandY + 6, { align: 'center' })
+  doc.text(title, pageW / 2, bandY + 6, { align: 'center' })
   doc.setFontSize(7.5)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...BRAND_LIGHT)
-  doc.text(`N° ${bon.numero}   |   ${formatDate(bon.date)}`, pageW - margin, bandY + 6, { align: 'right' })
+  doc.text(`N° ${numero}   |   ${date}`, pageW - margin, bandY + 6, { align: 'right' })
+  return bandY
+}
 
-  // Status badge
-  let y = bandY + 16
-  const statusLabels = { DRAFT: 'Brouillon', VALIDATED: 'Validé', CANCELLED: 'Annulé' }
+function _drawStatusBadge(doc, { margin, y, label }) {
   doc.setFillColor(240, 248, 255)
   doc.setDrawColor(...BRAND_LIGHT)
-  doc.roundedRect(margin, y - 5, 55, 8, 2, 2, 'FD')
+  doc.roundedRect(margin, y - 5, 80, 8, 2, 2, 'FD')
   doc.setTextColor(...BRAND_MID)
   doc.setFontSize(8)
   doc.setFont('helvetica', 'bold')
-  doc.text(`Statut : ${statusLabels[bon.status] || bon.status}`, margin + 3, y)
+  doc.text(`Statut : ${label}`, margin + 3, y)
+}
 
-  // Payment info table
-  y += 10
-  const MODE_LABELS = { ESPECE: 'Espèce', CHEQUE: 'Chèque' }
-  const infoRows = [
-    ['Mode de paiement', MODE_LABELS[bon.mode_paiement] ?? bon.mode_paiement ?? '—'],
-    ['Bénéficiaire (Reçu par)', bon.beneficiaire || '—'],
-    ['Montant en chiffres', `${Number(bon.montant).toLocaleString('fr-FR')} FCFA`],
-    ['Montant en lettres', bon.montant_lettres || '—'],
-    ['Motif', bon.motif || '—'],
-  ]
-  if (bon.notes) infoRows.push(['Notes', bon.notes])
+function _drawSection(doc, { text, y, pageW, margin }) {
+  doc.setTextColor(...BRAND_DEEP)
+  doc.setFontSize(10)
+  doc.setFont('helvetica', 'bold')
+  doc.text(text, margin, y)
+  doc.setDrawColor(...BRAND_LIGHT)
+  doc.setLineWidth(0.5)
+  doc.line(margin, y + 2, pageW - margin, y + 2)
+  return y + 8
+}
 
-  autoTable(doc, {
-    startY: y,
-    body: infoRows,
-    margin: { left: margin, right: margin },
-    styles: { fontSize: 9, cellPadding: 3.5 },
-    columnStyles: {
-      0: { fontStyle: 'bold', cellWidth: 55, fillColor: [245, 249, 255], textColor: BRAND_DEEP },
-      1: { textColor: [30, 30, 30] },
-    },
-    theme: 'grid',
-    tableLineColor: [210, 225, 245],
-    tableLineWidth: 0.3,
+function _drawFields(doc, { fields, startY, col1, col2 }) {
+  fields.forEach(([label, value], i) => {
+    const x = i % 2 === 0 ? col1 : col2
+    const rowY = startY + Math.floor(i / 2) * 10
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(7)
+    doc.setTextColor(150, 150, 150)
+    doc.text(label.toUpperCase(), x, rowY)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.setTextColor(30, 30, 30)
+    const lines = doc.splitTextToSize(String(value ?? '—'), col2 - x - 4)
+    doc.text(lines[0], x, rowY + 5)
+  })
+  return startY + Math.ceil(fields.length / 2) * 10
+}
+
+function _drawSignatureRow(doc, { signers, y, pageW, margin }) {
+  // signers: [{ role, name, mention, date }]
+  const n = signers.length
+  const colW = (pageW - margin * 2) / n
+  const boxH = 34
+
+  signers.forEach(({ role, name, mention, date }, i) => {
+    const x = margin + i * colW
+    const cx = x + colW / 2
+
+    doc.setDrawColor(...BRAND_MID)
+    doc.setLineWidth(0.3)
+    doc.setFillColor(248, 251, 255)
+    doc.roundedRect(x + 2, y, colW - 4, boxH, 1.5, 1.5, 'FD')
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(7.5)
+    doc.setTextColor(...BRAND_DEEP)
+    doc.text(role, cx, y + 6, { align: 'center' })
+
+    if (name) {
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7)
+      doc.setTextColor(50, 50, 50)
+      const nm = doc.splitTextToSize(name, colW - 10)
+      doc.text(nm[0], cx, y + 12, { align: 'center' })
+    }
+
+    if (mention) {
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(7)
+      doc.setTextColor(22, 101, 52)
+      doc.text(mention, cx, y + (name ? 18 : 13), { align: 'center' })
+    }
+
+    if (date) {
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(6.5)
+      doc.setTextColor(120, 120, 120)
+      doc.text(date, cx, y + (name ? 23 : 18), { align: 'center' })
+    }
+
+    doc.setDrawColor(180, 180, 180)
+    doc.setLineWidth(0.25)
+    doc.line(x + 6, y + boxH - 3, x + colW - 6, y + boxH - 3)
   })
 
-  // Items table
+  return y + boxH + 4
+}
+
+function _drawAllPageFooters(doc, { pageW, headerLogo, headerDeco, margin }) {
+  const pageCount = doc.internal.getNumberOfPages()
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i)
+    const ph = doc.internal.pageSize.getHeight()
+    if (i > 1 && headerDeco) {
+      doc.saveGraphicsState()
+      doc.setGState(new doc.GState({ opacity: 0.06 }))
+      doc.addImage(headerDeco, 'PNG', 0, 0, pageW, ph)
+      doc.restoreGraphicsState()
+    }
+    if (i > 1 && headerLogo) {
+      doc.addImage(headerLogo, 'PNG', 0, 0, pageW, 18)
+      doc.setFillColor(...BRAND_DEEP)
+      doc.rect(0, 18, pageW, 5, 'F')
+    }
+    doc.setFillColor(...BRAND_DEEP)
+    doc.rect(0, ph - 10, pageW, 10, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFontSize(7)
+    doc.setFont('helvetica', 'normal')
+    doc.text('JoFé Digital SARL — Document confidentiel', margin, ph - 4)
+    doc.text(`Page ${i} / ${pageCount}`, pageW - margin, ph - 4, { align: 'right' })
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Bon de Paiement PDF
+// ---------------------------------------------------------------------------
+export async function exportBonPaiementPDF(bon) {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const pageW = doc.internal.pageSize.getWidth()
+  const pageH = doc.internal.pageSize.getHeight()
+  const margin = 14
+  const col1 = margin
+  const col2 = pageW / 2
+
+  const [headerLogo, headerDeco] = await Promise.all([
+    loadImageAsBase64(headerLogoUrl),
+    loadImageAsBase64(headerDecoUrl),
+  ])
+
+  const headerH = _drawPageBackground(doc, { pageW, pageH, headerLogo, headerDeco, margin })
+  const bandY = _drawTitleBand(doc, {
+    pageW, margin, title: 'BON DE PAIEMENT',
+    numero: bon.numero, date: formatDate(bon.date), headerH,
+  })
+
+  const BP_STATUS = { DRAFT: 'Brouillon', VALIDATED: 'Validé', CANCELLED: 'Annulé' }
+  let y = bandY + 16
+  _drawStatusBadge(doc, { margin, y, label: BP_STATUS[bon.status] || bon.status })
+
+  // ── Informations générales ──────────────────────────────────────────────
+  y = _drawSection(doc, { text: 'Informations générales', y: y + 10, pageW, margin })
+  const MODE_LABELS = { ESPECE: 'Espèce', CHEQUE: 'Chèque' }
+  const infoFields = [
+    ['Date', formatDate(bon.date)],
+    ['Mode de paiement', MODE_LABELS[bon.mode_paiement] ?? bon.mode_paiement ?? '—'],
+    ['Bénéficiaire (Reçu par)', bon.beneficiaire || '—'],
+    ['Montant', `${Number(bon.montant).toLocaleString('fr-FR')} FCFA`],
+    ['Créé par', getFullName(bon.created_by_detail) || '—'],
+    ['Statut', BP_STATUS[bon.status] || bon.status],
+  ]
+  y = _drawFields(doc, { fields: infoFields, startY: y, col1, col2 }) + 4
+
+  // Motif (pleine largeur)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(7)
+  doc.setTextColor(150, 150, 150)
+  doc.text('MOTIF', col1, y)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(30, 30, 30)
+  const motifLines = doc.splitTextToSize(bon.motif || '—', pageW - margin * 2)
+  doc.text(motifLines, col1, y + 5)
+  y += motifLines.length * 5 + 8
+
+  // Montant en lettres
+  if (bon.montant_lettres) {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(7)
+    doc.setTextColor(150, 150, 150)
+    doc.text('MONTANT EN LETTRES', col1, y)
+    doc.setFont('helvetica', 'italic')
+    doc.setFontSize(9)
+    doc.setTextColor(30, 30, 30)
+    const letLines = doc.splitTextToSize(bon.montant_lettres, pageW - margin * 2)
+    doc.text(letLines, col1, y + 5)
+    y += letLines.length * 5 + 8
+  }
+
+  // Notes
+  if (bon.notes) {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(7)
+    doc.setTextColor(150, 150, 150)
+    doc.text('NOTES', col1, y)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.setTextColor(30, 30, 30)
+    const noteLines = doc.splitTextToSize(bon.notes, pageW - margin * 2)
+    doc.text(noteLines, col1, y + 5)
+    y += noteLines.length * 5 + 8
+  }
+
+  // ── Articles ───────────────────────────────────────────────────────────
   const items = bon.items || []
   if (items.length > 0) {
-    const tableEndY = doc.lastAutoTable.finalY + 8
-    doc.setTextColor(...BRAND_DEEP)
-    doc.setFontSize(10)
-    doc.setFont('helvetica', 'bold')
-    doc.text('Tableau récapitulatif', margin, tableEndY)
-    doc.setDrawColor(...BRAND_LIGHT)
-    doc.setLineWidth(0.5)
-    doc.line(margin, tableEndY + 2, pageW - margin, tableEndY + 2)
-
+    y = _drawSection(doc, { text: 'Articles', y, pageW, margin }) - 2
     const total = items.reduce((s, i) => s + (parseFloat(i.montant) || 0), 0)
     const body = items.map((item) => [item.designation || '—', formatCFA(item.montant)])
     body.push(['TOTAL', formatCFA(total)])
-
     autoTable(doc, {
-      startY: tableEndY + 6,
+      startY: y,
       head: [['Désignation / Détail', 'Montant (FCFA)']],
       body,
       margin: { left: margin, right: margin },
       styles: { fontSize: 8.5, cellPadding: 3 },
-      headStyles: { fillColor: BRAND_DEEP, textColor: [255, 255, 255], fontStyle: 'bold' },
+      headStyles: { fillColor: BRAND_DEEP, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5 },
       alternateRowStyles: { fillColor: [245, 249, 255] },
       columnStyles: { 1: { halign: 'right', cellWidth: 45 } },
       didParseCell(data) {
@@ -458,35 +598,33 @@ export async function exportBonPaiementPDF(bon) {
         }
       },
     })
+    y = doc.lastAutoTable.finalY + 10
   }
 
-  // Signature zones
-  const sigY = doc.lastAutoTable.finalY + 18
-  const colW = (pageW - margin * 2) / 2
-  ;[['La Caisse', ''], ['Le Receveur', bon.beneficiaire || '']].forEach(([title, sub], i) => {
-    const x = margin + i * colW
-    doc.setDrawColor(...BRAND_MID)
-    doc.setLineWidth(0.4)
-    doc.line(x + 4, sigY + 22, x + colW - 8, sigY + 22)
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(8)
-    doc.setTextColor(...BRAND_DEEP)
-    doc.text(title, x + colW / 2 - 4, sigY + 6, { align: 'center' })
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(7.5)
-    doc.setTextColor(100, 100, 100)
-    doc.text(sub, x + colW / 2 - 4, sigY + 27, { align: 'center' })
+  // ── Signatures et approbations ─────────────────────────────────────────
+  y = _drawSection(doc, { text: 'Signatures et approbations', y, pageW, margin })
+  const isValidated = bon.status === 'VALIDATED'
+  _drawSignatureRow(doc, {
+    y,
+    pageW,
+    margin,
+    signers: [
+      {
+        role: 'Le Comptable',
+        name: getFullName(bon.created_by_detail) || '—',
+        mention: null,
+        date: formatDate(bon.created_at),
+      },
+      {
+        role: 'Le DAF',
+        name: null,
+        mention: isValidated ? 'Approuvé' : null,
+        date: null,
+      },
+    ],
   })
 
-  // Footer
-  doc.setFillColor(...BRAND_DEEP)
-  doc.rect(0, pageH - 10, pageW, 10, 'F')
-  doc.setTextColor(255, 255, 255)
-  doc.setFontSize(7)
-  doc.setFont('helvetica', 'normal')
-  doc.text('JoFé Digital SARL — Document confidentiel', margin, pageH - 4)
-  doc.text('Page 1 / 1', pageW - margin, pageH - 4, { align: 'right' })
-
+  _drawAllPageFooters(doc, { pageW, headerLogo, headerDeco, margin })
   doc.save(`bon-paiement-${bon.numero || bon.id}.pdf`)
 }
 
@@ -498,160 +636,84 @@ export async function exportFicheMissionPDF(mission) {
   const pageW = doc.internal.pageSize.getWidth()
   const pageH = doc.internal.pageSize.getHeight()
   const margin = 14
+  const col1 = margin
+  const col2 = pageW / 2
 
   const [headerLogo, headerDeco] = await Promise.all([
     loadImageAsBase64(headerLogoUrl),
     loadImageAsBase64(headerDecoUrl),
   ])
 
-  if (headerDeco) {
-    doc.saveGraphicsState()
-    doc.setGState(new doc.GState({ opacity: 0.06 }))
-    doc.addImage(headerDeco, 'PNG', 0, 0, pageW, pageH)
-    doc.restoreGraphicsState()
-  }
-
-  const headerH = 29
-  if (headerLogo) {
-    doc.addImage(headerLogo, 'PNG', 0, 0, pageW, headerH)
-  } else {
-    doc.setFillColor(...BRAND_DEEP)
-    doc.rect(0, 0, pageW, headerH, 'F')
-    doc.setTextColor(255, 255, 255)
-    doc.setFontSize(14)
-    doc.setFont('helvetica', 'bold')
-    doc.text('JoFé Digital SARL', margin, 18)
-  }
-
-  const bandY = headerH
-  doc.setFillColor(...BRAND_DEEP)
-  doc.rect(0, bandY, pageW, 9, 'F')
-  doc.setTextColor(255, 255, 255)
-  doc.setFontSize(9)
-  doc.setFont('helvetica', 'bold')
-  doc.text('FICHE DE FRAIS DE MISSION', pageW / 2, bandY + 6, { align: 'center' })
-  doc.setFontSize(7.5)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...BRAND_LIGHT)
-  doc.text(`N° ${mission.numero}   |   ${formatDate(mission.date)}`, pageW - margin, bandY + 6, { align: 'right' })
-
-  // Status
-  let y = bandY + 16
-  const statusLabels = {
+  const FM_STATUS = {
     DRAFT: 'Brouillon', PENDING_MANAGER: 'En attente Manager', PENDING_DAF: 'En attente DAF',
     PENDING_DG: 'En attente DG', APPROVED: 'Approuvée', REJECTED: 'Rejetée',
     IN_PROGRESS: 'En cours', DONE: 'Terminée',
   }
-  doc.setFillColor(240, 248, 255)
-  doc.setDrawColor(...BRAND_LIGHT)
-  doc.roundedRect(margin, y - 5, 65, 8, 2, 2, 'FD')
-  doc.setTextColor(...BRAND_MID)
-  doc.setFontSize(8)
-  doc.setFont('helvetica', 'bold')
-  doc.text(`Statut : ${statusLabels[mission.status] || mission.status}`, margin + 3, y)
 
-  // Identification
-  y += 10
-  doc.setTextColor(...BRAND_DEEP)
-  doc.setFontSize(10)
-  doc.setFont('helvetica', 'bold')
-  doc.text('Identification', margin, y)
-  doc.setDrawColor(...BRAND_LIGHT)
-  doc.setLineWidth(0.5)
-  doc.line(margin, y + 2, pageW - margin, y + 2)
+  const headerH = _drawPageBackground(doc, { pageW, pageH, headerLogo, headerDeco, margin })
+  const bandY = _drawTitleBand(doc, {
+    pageW, margin, title: 'FICHE DE FRAIS DE MISSION',
+    numero: mission.numero, date: formatDate(mission.date), headerH,
+  })
 
-  y += 8
-  const col1 = margin
-  const col2 = pageW / 2
-  const idFields = [
+  let y = bandY + 16
+  _drawStatusBadge(doc, { margin, y, label: FM_STATUS[mission.status] || mission.status })
+
+  // ── Informations générales ──────────────────────────────────────────────
+  y = _drawSection(doc, { text: 'Informations générales', y: y + 10, pageW, margin })
+  const infoFields = [
     ['Nom et Prénom', mission.nom_prenom || '—'],
     ['Matricule', mission.matricule_display || '—'],
     ['Fonction', mission.fonction || '—'],
-    ['Date', formatDate(mission.date)],
+    ['Date de la fiche', formatDate(mission.date)],
+    ['Département', mission.department_detail?.name || '—'],
+    ['Créé par', getFullName(mission.created_by_detail) || '—'],
   ]
-  if (mission.prestataire_nom) idFields.push(['Prestataire', mission.prestataire_nom])
+  if (mission.prestataire_nom) infoFields.push(['Prestataire', mission.prestataire_nom], ['', ''])
+  y = _drawFields(doc, { fields: infoFields, startY: y, col1, col2 }) + 6
 
-  idFields.forEach(([label, value], i) => {
-    const x = i % 2 === 0 ? col1 : col2
-    const rowY = y + Math.floor(i / 2) * 10
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(7)
-    doc.setTextColor(150, 150, 150)
-    doc.text(label.toUpperCase(), x, rowY)
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(9)
-    doc.setTextColor(30, 30, 30)
-    doc.text(value, x, rowY + 5)
-  })
-
-  y += Math.ceil(idFields.length / 2) * 10 + 6
-
-  // Mission details
-  doc.setTextColor(...BRAND_DEEP)
-  doc.setFontSize(10)
-  doc.setFont('helvetica', 'bold')
-  doc.text('Détails de la mission', margin, y)
-  doc.setDrawColor(...BRAND_LIGHT)
-  doc.line(margin, y + 2, pageW - margin, y + 2)
-  y += 8
-
+  // ── Détails de la mission ───────────────────────────────────────────────
+  y = _drawSection(doc, { text: 'Détails de la mission', y, pageW, margin })
   const missionFields = [
     ['Destination', mission.destination || '—'],
     ['Date de départ', formatDate(mission.date_debut)],
-    ['Objet de la mission', mission.objet_mission || '—'],
     ['Date de retour', formatDate(mission.date_fin)],
+    ...(mission.agent_liaison_detail
+      ? [['Agent de liaison', getFullName(mission.agent_liaison_detail) || '—']]
+      : []),
   ]
-  if (mission.agent_liaison_detail) {
-    const nom = `${mission.agent_liaison_detail.first_name || ''} ${mission.agent_liaison_detail.last_name || ''}`.trim()
-    missionFields.push(['Agent de liaison', nom || '—'])
-  }
+  y = _drawFields(doc, { fields: missionFields, startY: y, col1, col2 }) + 4
 
-  missionFields.forEach(([label, value], i) => {
-    const x = i % 2 === 0 ? col1 : col2
-    const rowY = y + Math.floor(i / 2) * 10
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(7)
-    doc.setTextColor(150, 150, 150)
-    doc.text(label.toUpperCase(), x, rowY)
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(9)
-    doc.setTextColor(30, 30, 30)
-    const lines = doc.splitTextToSize(value, col2 - x - 4)
-    doc.text(lines[0] || value, x, rowY + 5)
-  })
-
-  y += Math.ceil(missionFields.length / 2) * 10 + 6
-
-  // Frais table
-  doc.setTextColor(...BRAND_DEEP)
-  doc.setFontSize(10)
+  // Objet (pleine largeur)
   doc.setFont('helvetica', 'bold')
-  doc.text('Détail des frais', margin, y)
-  doc.setDrawColor(...BRAND_LIGHT)
-  doc.line(margin, y + 2, pageW - margin, y + 2)
-  y += 4
+  doc.setFontSize(7)
+  doc.setTextColor(150, 150, 150)
+  doc.text("OBJET DE LA MISSION", col1, y)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(30, 30, 30)
+  const objetLines = doc.splitTextToSize(mission.objet_mission || '—', pageW - margin * 2)
+  doc.text(objetLines, col1, y + 5)
+  y += objetLines.length * 5 + 10
 
+  // ── Détail des frais ────────────────────────────────────────────────────
+  y = _drawSection(doc, { text: 'Détail des frais', y, pageW, margin }) - 2
   const fraisBody = [
-    ['Hébergement',    formatCFA(mission.hebergement)],
-    ['Restauration',   formatCFA(mission.restauration)],
-    ['Transport A/R',  formatCFA(mission.transport_aller_retour)],
-    ['Autres frais',   formatCFA(mission.autres_frais)],
-    ['TOTAL',          formatCFA(mission.total_frais)],
+    ['Hébergement',   formatCFA(mission.hebergement)],
+    ['Restauration',  formatCFA(mission.restauration)],
+    ['Transport A/R', formatCFA(mission.transport_aller_retour)],
+    ['Autres frais',  formatCFA(mission.autres_frais)],
+    ['TOTAL',         formatCFA(mission.total_frais)],
   ]
-
   autoTable(doc, {
     startY: y,
     body: fraisBody,
     margin: { left: margin, right: margin },
-    tableWidth: 100,
+    tableWidth: 110,
     styles: { fontSize: 9, cellPadding: 3 },
-    columnStyles: {
-      0: { fontStyle: 'normal', cellWidth: 55 },
-      1: { halign: 'right', cellWidth: 45 },
-    },
-    theme: 'grid',
-    tableLineColor: [210, 225, 245],
-    tableLineWidth: 0.3,
+    headStyles: { fillColor: BRAND_DEEP, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5 },
+    alternateRowStyles: { fillColor: [245, 249, 255] },
+    columnStyles: { 0: { cellWidth: 65 }, 1: { halign: 'right', cellWidth: 45 } },
     didParseCell(data) {
       if (data.row.index === fraisBody.length - 1) {
         data.cell.styles.fontStyle = 'bold'
@@ -660,44 +722,59 @@ export async function exportFicheMissionPDF(mission) {
       }
     },
   })
+  y = doc.lastAutoTable.finalY + 8
 
+  // Notes
   if (mission.notes) {
-    const notesY = doc.lastAutoTable.finalY + 8
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(7)
     doc.setTextColor(150, 150, 150)
-    doc.text('NOTES', margin, notesY)
+    doc.text('NOTES', col1, y)
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(9)
     doc.setTextColor(30, 30, 30)
     const lines = doc.splitTextToSize(mission.notes, pageW - margin * 2)
-    doc.text(lines, margin, notesY + 5)
+    doc.text(lines, col1, y + 5)
+    y += lines.length * 5 + 10
   }
 
-  // Signatures
-  const sigY = doc.lastAutoTable.finalY + (mission.notes ? 20 : 16)
-  const sigLabels = ["L'Intéressé(e)", 'Le Manager', 'Le DG / DAF']
-  const sigW = (pageW - margin * 2) / 3
-  sigLabels.forEach((label, i) => {
-    const x = margin + i * sigW
-    doc.setDrawColor(...BRAND_MID)
-    doc.setLineWidth(0.4)
-    doc.line(x + 4, sigY + 22, x + sigW - 4, sigY + 22)
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(7.5)
-    doc.setTextColor(...BRAND_DEEP)
-    doc.text(label, x + sigW / 2, sigY + 6, { align: 'center' })
+  // ── Signatures et approbations ─────────────────────────────────────────
+  y = _drawSection(doc, { text: 'Signatures et approbations', y, pageW, margin })
+  const isApproved = ['APPROVED', 'IN_PROGRESS', 'DONE'].includes(mission.status)
+  const managerDetail = mission.created_by_detail?.manager_detail
+  _drawSignatureRow(doc, {
+    y,
+    pageW,
+    margin,
+    signers: [
+      {
+        role: "L'Intéressé(e)",
+        name: mission.nom_prenom || '—',
+        mention: null,
+        date: formatDate(mission.date),
+      },
+      {
+        role: 'Le Supérieur Hiérarchique',
+        name: managerDetail ? getFullName(managerDetail) : null,
+        mention: isApproved ? 'Approuvé' : null,
+        date: null,
+      },
+      {
+        role: 'Le DAF',
+        name: null,
+        mention: isApproved ? 'Approuvé' : null,
+        date: null,
+      },
+      {
+        role: 'Le DG',
+        name: null,
+        mention: isApproved ? 'Approuvé' : null,
+        date: null,
+      },
+    ],
   })
 
-  // Footer
-  doc.setFillColor(...BRAND_DEEP)
-  doc.rect(0, pageH - 10, pageW, 10, 'F')
-  doc.setTextColor(255, 255, 255)
-  doc.setFontSize(7)
-  doc.setFont('helvetica', 'normal')
-  doc.text('JoFé Digital SARL — Document confidentiel', margin, pageH - 4)
-  doc.text('Page 1 / 1', pageW - margin, pageH - 4, { align: 'right' })
-
+  _drawAllPageFooters(doc, { pageW, headerLogo, headerDeco, margin })
   doc.save(`fiche-mission-${mission.numero || mission.id}.pdf`)
 }
 
